@@ -1,0 +1,15 @@
+{
+  "playback": {
+    "textTracks": [
+      {
+        "id": "en-cc",
+        "language": "en",
+        "label": "English CC",
+        "kind": "subtitles",
+        "url": "https://cf.prod.media.max.com/subtitles/english.vtt?token=abc",
+        "default": true,
+        "selected": true
+      }
+    ]
+  }
+}

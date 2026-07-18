@@ -69,13 +69,15 @@ GSS.Admin = (function createAdmin() {
       + '<label class="check"><input type="checkbox" name="injectTranslated" value="true"' + checked(config.injectTranslated) + '>额外显示纯翻译轨</label>'
       + '<label class="check"><input type="checkbox" name="cacheEnabled" value="true"' + checked(config.cacheEnabled) + '>启用翻译缓存</label>'
       + '<label class="check"><input type="checkbox" name="debug" value="true"' + checked(config.debug) + '>启用调试日志</label>'
-      + '<div class="actions"><button type="submit">保存设置</button><a class="button" href="/reset?token=' + escapeHtml(token) + '">恢复默认</a><a class="button" href="/health">运行状态</a></div></form>'
+      + '<div class="actions"><button type="submit">保存设置</button><a class="button" href="/reset?token=' + escapeHtml(token) + '">恢复默认</a><a class="button" href="/health">运行状态</a><a class="button" href="/diagnostics">诊断记录</a></div></form>'
       + '<p class="muted">保存后请完全退出并重新打开流媒体 App。此页面由代理脚本合成，不是常驻 Web 服务。</p></main></body></html>';
     GSS.Runtime.doneResponse(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" }, html);
   }
   function handle(url, config, logger) {
     var path = GSS.Url.path(url), query = params(url), token = GSS.getAdminToken();
-    if (path === "/health") { json(200, { ok: true, version: GSS.VERSION, runtime: GSS.Runtime.name, providers: GSS.Providers.list(), formats: GSS.Formats.list(), platforms: GSS.Platforms.list(), config: publicConfig(config) }); return true; }
+    if (path === "/health") { json(200, { ok: true, version: GSS.VERSION, runtime: GSS.Runtime.name, providers: GSS.Providers.list(), formats: GSS.Formats.list(), platforms: GSS.Platforms.list(), config: publicConfig(config), diagnosticsCount: GSS.Diagnostics ? GSS.Diagnostics.list().length : 0 }); return true; }
+    if (path === "/diagnostics") { json(200, { version: GSS.VERSION, runtime: GSS.Runtime.name, records: GSS.Diagnostics ? GSS.Diagnostics.list() : [] }); return true; }
+    if (path === "/clear-diagnostics") { if (query.token !== token) { json(403, { ok: false, error: "invalid admin token" }); return true; } if (GSS.Diagnostics) GSS.Diagnostics.clear(); json(200, { ok: true, cleared: true }); return true; }
     if (path === "/api/config") { json(200, { version: GSS.VERSION, providers: GSS.Providers.list(), formats: GSS.Formats.list(), platforms: GSS.Platforms.list(), config: publicConfig(config) }); return true; }
     if (path === "/save") {
       if (query.token !== token) { json(403, { ok: false, error: "invalid admin token" }); return true; }

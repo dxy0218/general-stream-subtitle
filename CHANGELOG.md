@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.2
+
+- Restrict Pluto TV interception to known master-playlist hosts and paths.
+- Remove broad `*.pluto.tv` MITM coverage to reduce app and playback breakage.
+- Add a conservative Max/Paramount playback-JSON text-track adapter.
+- Add Paramount+ Live TV platform detection and dedicated manifest/playback rules.
+- Add sanitized runtime diagnostics at `http://gss.local/diagnostics`.
+- Expand automated coverage for Max JSON tracks, Paramount Live, rule isolation and diagnostics.
+
 ## 0.5.1
 
 - Set injected translation tracks to `AUTOSELECT=NO` so Chinese-language Apple devices do not start live translation before the user selects the track.
