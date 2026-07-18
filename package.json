@@ -2,12 +2,12 @@
   "name": "general-stream-subtitle",
   "version": "0.3.0",
   "private": true,
-  "description": "Lightweight multi-platform HLS/WebVTT subtitle translation middleware for Surge, Loon and Shadowrocket. Staged v0.4.0 release trigger.",
+  "description": "Staged v0.4.0 release bootstrap.",
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
     "test": "node --test tests/*.test.mjs",
-    "check": "npm run build && npm test"
+    "check": "node scripts/release-bootstrap.mjs"
   },
   "engines": {
     "node": ">=18"

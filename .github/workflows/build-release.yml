@@ -18,28 +18,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Prepare staged v0.4.0 release
-        shell: bash
-        run: |
-          if [ -d .release ]; then
-            cat .release/project.b64.part* | base64 --decode > /tmp/gss-v040.zip
-            rm -rf /tmp/gss-project
-            mkdir -p /tmp/gss-project
-            unzip -q /tmp/gss-v040.zip -d /tmp/gss-project
-            find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
-            cp -a /tmp/gss-project/. .
-          fi
       - run: npm run check
-      - name: Commit validated release
+      - name: Commit generated bundles
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
+          git add dist modules
           git diff --cached --quiet && exit 0
-          git commit -m "Release General Stream Subtitle v0.4.0"
+          git commit -m "Build runtime bundles"
           git push
