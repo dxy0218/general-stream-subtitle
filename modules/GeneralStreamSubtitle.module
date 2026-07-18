@@ -1,7 +1,7 @@
 #!name=General Stream Subtitle
 #!desc=多平台 HLS/DASH、多字幕格式、多翻译引擎（v0.5.0）
 #!author=dxy0218 & contributors
-#!homepage=https://github.com/dxy0218/general-stream-subtitle
+#"homepage=https://github.com/dxy0218/general-stream-subtitle
 #!arguments=SOURCE:auto, TARGET:zh-CN, TRACK_NAME:Translate-zh, PROVIDER:google-free, PLATFORMS:all, FORMATS:all, GENERIC:false, YT_STRATEGY:direct, YT_ASR:true, YT_LIVE:true, YT_MANUAL:true, PURE_TRACK:false, ORDER:translation-first, CACHE:true, DEBUG:true
 #!arguments-desc=SOURCE：auto 或语言代码\n\nTARGET：目标语言\n\nPROVIDER：翻译引擎\n\nPLATFORMS：平台 ID\n\nFORMATS：youtube|vtt|srt|ttml|ass|json\n\nYT_STRATEGY：direct 或 virtual\n\nYT_ASR：YouTube 自动字幕\n\nYT_LIVE：YouTube 直播字幕\n\nAPI Key 请在 http://gss.local/ 保存
 
