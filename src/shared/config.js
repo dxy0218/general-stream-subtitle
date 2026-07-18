@@ -1,16 +1,18 @@
-GSS.VERSION = "0.2.0";
-GSS.SETTINGS_KEY = "GSS_SETTINGS_V1";
+GSS.VERSION = "0.3.0";
+GSS.SETTINGS_KEY = "GSS_SETTINGS_V2";
 GSS.ADMIN_TOKEN_KEY = "GSS_ADMIN_TOKEN_V1";
 
 GSS.DEFAULTS = {
   enabled: true,
   provider: "google",
-  source: "en",
+  source: "auto",
+  sourcePriority: "en,ja,ko,es,fr,de,it,pt",
   target: "zh-CN",
   trackName: "Translate-zh",
   injectTranslated: false,
   translatedTrackName: "Translate-zh-only",
   bilingualOrder: "translation-first",
+  platforms: "all",
   debug: true,
   cacheEnabled: true,
   cacheTTL: 6 * 60 * 60 * 1000,
@@ -46,11 +48,13 @@ GSS.allowedSettings = {
   enabled: "boolean",
   provider: "string",
   source: "string",
+  sourcePriority: "string",
   target: "string",
   trackName: "string",
   injectTranslated: "boolean",
   translatedTrackName: "string",
   bilingualOrder: "string",
+  platforms: "string",
   debug: "boolean",
   cacheEnabled: "boolean",
   cacheTTL: "number"
@@ -63,10 +67,11 @@ GSS.normalizeSettings = function normalizeSettings(input) {
     var type = GSS.allowedSettings[key];
     if (type === "boolean") output[key] = GSS.asBoolean(input[key], false);
     else if (type === "number" && !isNaN(Number(input[key]))) output[key] = Math.max(0, Number(input[key]));
-    else if (type === "string") output[key] = String(input[key]).slice(0, 120);
+    else if (type === "string") output[key] = String(input[key]).slice(0, 240);
   });
   if (output.provider && output.provider !== "google") output.provider = "google";
   if (output.bilingualOrder && output.bilingualOrder !== "original-first") output.bilingualOrder = "translation-first";
+  if (output.source) output.source = GSS.Language ? GSS.Language.normalize(output.source) : String(output.source).toLowerCase();
   return output;
 };
 
@@ -106,7 +111,9 @@ GSS.getConfig = function getConfig() {
   var stored = GSS.readStoredSettings();
   Object.keys(stored).forEach(function (key) { config[key] = stored[key]; });
 
+  config.source = config.source || "auto";
   config.trackName = config.trackName || "Translate-zh";
   config.translatedTrackName = config.translatedTrackName || "Translate-zh-only";
+  config.platforms = config.platforms || "all";
   return config;
 };
