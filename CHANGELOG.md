@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.3
+
+- Add `http://gss.localhost/` as the preferred local administration URL.
+- Add `http://gss.localhost/diagnostics` as a DNS-independent diagnostics endpoint.
+- Keep `gss.local`, `127.0.0.1:6170`, and `localhost:6170` as compatibility aliases.
+- Add an integration test for the new `.localhost` endpoint.
+
 ## 0.5.2
 
 - Restrict Pluto TV interception to known master-playlist hosts and paths.
