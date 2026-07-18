@@ -1,12 +1,15 @@
 #!name=General Stream Subtitle
-#!desc=为 Max 注入 Translate-zh 双语字幕轨（v0.2.0）
+#!desc=为多平台 HLS 视频注入 Translate-zh 双语字幕轨（v0.3.0）
 #!author=dxy0218 & contributors
 #!homepage=https://github.com/dxy0218/general-stream-subtitle
-#!arguments=TARGET=zh-CN&TRACK_NAME=Translate-zh&PURE_TRACK=false&ORDER=translation-first&CACHE=true&DEBUG=true
+#!arguments=SOURCE=auto&TARGET=zh-CN&TRACK_NAME=Translate-zh&PLATFORMS=all&PURE_TRACK=false&ORDER=translation-first&CACHE=true&DEBUG=true
+
+[General]
+force-http-engine-hosts = %APPEND% *.hls.pv-cdn.net, *.hls.row.aiv-cdn.net, *avodhlss3ww-a.akamaihd.net, s3.amazonaws.com, cf-timedtext.aux.pv-cdn.net, d1v5ir2lpwr8os.cloudfront.net, d22qjgkvxw22r6.cloudfront.net, d25xi40x97liuc.cloudfront.net, d27xxe7juh1us6.cloudfront.net, dmqdd6hw24ucf.cloudfront.net
 
 [Script]
-GSS Manifest = type=http-response, pattern=^https?:\/\/(?:[^\/]+\.)?(?:max\.com|h264\.io|hbomaxcdn\.com|api\.hbo\.com)\/.*\.m3u8(?:\?.*)?$, requires-body=1, max-size=2097152, timeout=15, script-path=https://raw.githubusercontent.com/dxy0218/general-stream-subtitle/main/dist/manifest.js, argument=source=en&target=%TARGET%&trackName=%TRACK_NAME%&injectTranslated=%PURE_TRACK%&bilingualOrder=%ORDER%&cacheEnabled=%CACHE%&debug=%DEBUG%
-GSS Gateway = type=http-request, pattern=^https?:\/\/(?:gss\.local|127\.0\.0\.1(?::6170)?|localhost(?::6170)?)\/.*, timeout=60, script-path=https://raw.githubusercontent.com/dxy0218/general-stream-subtitle/main/dist/gateway.js, argument=source=en&target=%TARGET%&trackName=%TRACK_NAME%&injectTranslated=%PURE_TRACK%&bilingualOrder=%ORDER%&cacheEnabled=%CACHE%&debug=%DEBUG%
+GSS Manifest = type=http-response, pattern=^https?:\/\/(?:(?:play|play-edge|hls|hls-svod)\.itunes\.apple\.com|vod-[^\/]+-(?:amt|aoc|svod)\.tv\.apple\.com|(?:[^\/]+\.)?(?:max\.com|h264\.io|hbomaxcdn\.com|api\.hbo\.com)|[^\/]+\.(?:media|prod)\.(?:dssott|starott|dssedge)\.com|[^\/]+\.hls\.pv-cdn\.net|[^\/]+\.hls\.row\.aiv-cdn\.net|[^\/]*avodhlss3ww-a\.akamaihd\.net|s3\.amazonaws\.com|cf-timedtext\.aux\.pv-cdn\.net|(?:d1v5ir2lpwr8os|d22qjgkvxw22r6|d25xi40x97liuc|d27xxe7juh1us6|dmqdd6hw24ucf)\.cloudfront\.net|vodmanifest\.hulustream\.com|manifest-dp\.hulustream\.com|(?:[^\/]+\.pplus\.paramount\.tech|(?:vod-[^\/]+|[^\/]+\.airspace-[^\/]+|[^\/]+-pplus)\.(?:cbsaavideo|cbsivideo|cbs)\.com)|[^\/]+\.cdn\.peacocktv\.com|content-discovery\.uplynk\.com|dplus-ph-(?:prod-vod\.akamaized\.net|google-v2\.prod-vod\.h264\.io)|[^\/]+-vod\.fubo\.tv|hls\.ted\.com)\/.*\.m3u8(?:\?.*)?$, requires-body=1, max-size=2097152, timeout=20, script-path=https://raw.githubusercontent.com/dxy0218/general-stream-subtitle/main/dist/manifest.js, argument=source=%SOURCE%&target=%TARGET%&trackName=%TRACK_NAME%&platforms=%PLATFORMS%&injectTranslated=%PURE_TRACK%&bilingualOrder=%ORDER%&cacheEnabled=%CACHE%&debug=%DEBUG%
+GSS Gateway = type=http-request, pattern=^https?:\/\/(?:gss\.local|127\.0\.0\.1(?::6170)?|localhost(?::6170)?)\/.*, timeout=60, script-path=https://raw.githubusercontent.com/dxy0218/general-stream-subtitle/main/dist/gateway.js, argument=source=%SOURCE%&target=%TARGET%&trackName=%TRACK_NAME%&platforms=%PLATFORMS%&injectTranslated=%PURE_TRACK%&bilingualOrder=%ORDER%&cacheEnabled=%CACHE%&debug=%DEBUG%
 
 [MITM]
-hostname = %APPEND% *.max.com, *.h264.io, *.hbomaxcdn.com, *.api.hbo.com, gss.local
+hostname = %APPEND% *.itunes.apple.com, *.tv.apple.com, *.max.com, *.h264.io, *.hbomaxcdn.com, *.api.hbo.com, *.media.dssott.com, *.prod.dssott.com, *.media.starott.com, *.prod.starott.com, *.media.dssedge.com, *.prod.dssedge.com, *.hls.pv-cdn.net, *.hls.row.aiv-cdn.net, *avodhlss3ww-a.akamaihd.net, s3.amazonaws.com, cf-timedtext.aux.pv-cdn.net, d1v5ir2lpwr8os.cloudfront.net, d22qjgkvxw22r6.cloudfront.net, d25xi40x97liuc.cloudfront.net, d27xxe7juh1us6.cloudfront.net, dmqdd6hw24ucf.cloudfront.net, vodmanifest.hulustream.com, manifest-dp.hulustream.com, *.pplus.paramount.tech, *.cbsaavideo.com, *.cbsivideo.com, *.cbs.com, *.cdn.peacocktv.com, content-discovery.uplynk.com, dplus-ph-prod-vod.akamaized.net, dplus-ph-google-v2.prod-vod.h264.io, *.fubo.tv, hls.ted.com, gss.local

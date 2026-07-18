@@ -1,4 +1,4 @@
-// General Stream Subtitle 0.2.0 - gateway
+// General Stream Subtitle 0.3.0 - gateway
 // MIT License - generated file; edit src/ instead.
 (function () {
 "use strict";
@@ -149,19 +149,101 @@ GSS.Cache = function Cache(config, logger) {
   return { get: get, set: set, clear: clear };
 };
 
-GSS.VERSION = "0.2.0";
-GSS.SETTINGS_KEY = "GSS_SETTINGS_V1";
+GSS.Language = (function createLanguageTools() {
+  var aliases = {
+    en: ["english", "英文", "英语"],
+    ja: ["japanese", "日本語", "日文", "日语"],
+    ko: ["korean", "한국어", "韩文", "韩语"],
+    es: ["spanish", "español", "西班牙语"],
+    fr: ["french", "français", "法语"],
+    de: ["german", "deutsch", "德语"],
+    it: ["italian", "italiano", "意大利语"],
+    pt: ["portuguese", "português", "葡萄牙语"],
+    ru: ["russian", "русский", "俄语"],
+    ar: ["arabic", "العربية", "阿拉伯语"],
+    hi: ["hindi", "हिन्दी", "印地语"],
+    th: ["thai", "ไทย", "泰语"],
+    vi: ["vietnamese", "tiếng việt", "越南语"],
+    id: ["indonesian", "bahasa indonesia", "印度尼西亚语"],
+    zh: ["chinese", "中文", "简体中文", "繁體中文", "繁体中文"]
+  };
+
+  function normalize(value) {
+    return String(value || "").trim().replace(/_/g, "-").toLowerCase();
+  }
+
+  function base(value) {
+    var normalized = normalize(value);
+    if (!normalized) return "";
+    if (normalized === "zh-hans" || normalized === "zh-cn" || normalized === "cmn-hans") return "zh-cn";
+    if (normalized === "zh-hant" || normalized === "zh-tw" || normalized === "zh-hk" || normalized === "cmn-hant") return "zh-tw";
+    return normalized.split("-")[0];
+  }
+
+  function matches(language, name, wanted) {
+    wanted = normalize(wanted || "auto");
+    if (wanted === "auto") return true;
+    var normalizedLanguage = normalize(language);
+    var wantedBase = base(wanted);
+    var languageBase = base(normalizedLanguage);
+    if (normalizedLanguage === wanted || languageBase === wantedBase) return true;
+    var loweredName = String(name || "").toLowerCase();
+    var names = aliases[wantedBase] || [];
+    for (var i = 0; i < names.length; i += 1) {
+      if (loweredName.indexOf(names[i].toLowerCase()) >= 0) return true;
+    }
+    return false;
+  }
+
+  function googleSource(language, configured) {
+    configured = normalize(configured || "auto");
+    if (configured !== "auto") return base(configured) || configured;
+    var detected = base(language);
+    return detected || "auto";
+  }
+
+  function priority(language, name, preferred) {
+    var normalized = base(language);
+    var list = String(preferred || "en,ja,ko,es,fr,de,it,pt").split(/[,|]/).map(function (item) { return base(item); });
+    var index = list.indexOf(normalized);
+    if (index >= 0) return Math.max(0, 40 - index);
+    var loweredName = String(name || "").toLowerCase();
+    for (var key in aliases) {
+      if (!Object.prototype.hasOwnProperty.call(aliases, key)) continue;
+      for (var i = 0; i < aliases[key].length; i += 1) {
+        if (loweredName.indexOf(aliases[key][i].toLowerCase()) >= 0) {
+          var aliasIndex = list.indexOf(key);
+          return aliasIndex >= 0 ? Math.max(0, 40 - aliasIndex) : 0;
+        }
+      }
+    }
+    return 0;
+  }
+
+  return {
+    normalize: normalize,
+    base: base,
+    matches: matches,
+    googleSource: googleSource,
+    priority: priority
+  };
+})();
+
+GSS.VERSION = "0.3.0";
+GSS.SETTINGS_KEY = "GSS_SETTINGS_V2";
 GSS.ADMIN_TOKEN_KEY = "GSS_ADMIN_TOKEN_V1";
 
 GSS.DEFAULTS = {
   enabled: true,
   provider: "google",
-  source: "en",
+  source: "auto",
+  sourcePriority: "en,ja,ko,es,fr,de,it,pt",
   target: "zh-CN",
   trackName: "Translate-zh",
   injectTranslated: false,
   translatedTrackName: "Translate-zh-only",
   bilingualOrder: "translation-first",
+  platforms: "all",
   debug: true,
   cacheEnabled: true,
   cacheTTL: 6 * 60 * 60 * 1000,
@@ -197,11 +279,13 @@ GSS.allowedSettings = {
   enabled: "boolean",
   provider: "string",
   source: "string",
+  sourcePriority: "string",
   target: "string",
   trackName: "string",
   injectTranslated: "boolean",
   translatedTrackName: "string",
   bilingualOrder: "string",
+  platforms: "string",
   debug: "boolean",
   cacheEnabled: "boolean",
   cacheTTL: "number"
@@ -214,10 +298,11 @@ GSS.normalizeSettings = function normalizeSettings(input) {
     var type = GSS.allowedSettings[key];
     if (type === "boolean") output[key] = GSS.asBoolean(input[key], false);
     else if (type === "number" && !isNaN(Number(input[key]))) output[key] = Math.max(0, Number(input[key]));
-    else if (type === "string") output[key] = String(input[key]).slice(0, 120);
+    else if (type === "string") output[key] = String(input[key]).slice(0, 240);
   });
   if (output.provider && output.provider !== "google") output.provider = "google";
   if (output.bilingualOrder && output.bilingualOrder !== "original-first") output.bilingualOrder = "translation-first";
+  if (output.source) output.source = GSS.Language ? GSS.Language.normalize(output.source) : String(output.source).toLowerCase();
   return output;
 };
 
@@ -257,8 +342,10 @@ GSS.getConfig = function getConfig() {
   var stored = GSS.readStoredSettings();
   Object.keys(stored).forEach(function (key) { config[key] = stored[key]; });
 
+  config.source = config.source || "auto";
   config.trackName = config.trackName || "Translate-zh";
   config.translatedTrackName = config.translatedTrackName || "Translate-zh-only";
+  config.platforms = config.platforms || "all";
   return config;
 };
 
@@ -376,6 +463,46 @@ GSS.Url = {
     return match ? match[1] : "";
   }
 };
+
+GSS.Platforms = (function createPlatformRegistry() {
+  var list = [
+    { id: "apple-fitness", name: "Apple Fitness+", test: function (host, path) { return /(^|\.)itunes\.apple\.com$/.test(host) && /\/hls\/workout\//.test(path); } },
+    { id: "apple-tv-plus", name: "Apple TV+", test: function (host, path) { return /(^|\.)itunes\.apple\.com$/.test(host) && /\/hls\/subscription\//.test(path); } },
+    { id: "apple-tv", name: "Apple TV", test: function (host, path) { return /(^|\.)itunes\.apple\.com$/.test(host) || /(^|\.)tv\.apple\.com$/.test(host); } },
+    { id: "max", name: "Max / HBO Max", test: function (host) { return /(^|\.)(max\.com|h264\.io|hbomaxcdn\.com|api\.hbo\.com)$/.test(host); } },
+    { id: "disney", name: "Disney+", test: function (host) { return /\.(media|prod)\.(dssott|starott|dssedge)\.com$/.test(host); } },
+    { id: "prime", name: "Prime Video (HLS)", test: function (host) { return /(\.hls\.(pv-cdn|row\.aiv-cdn)\.net$|avodhlss3ww-a\.akamaihd\.net$|^s3\.amazonaws\.com$|^cf-timedtext\.aux\.pv-cdn\.net$|^(d1v5ir2lpwr8os|d22qjgkvxw22r6|d25xi40x97liuc|d27xxe7juh1us6|dmqdd6hw24ucf)\.cloudfront\.net$)/.test(host); } },
+    { id: "hulu", name: "Hulu", test: function (host) { return /(^|\.)(hulustream\.com|huluim\.com)$/.test(host) || host === "assetshuluimcom-a.akamaihd.net"; } },
+    { id: "paramount", name: "Paramount+", test: function (host) { return /(^|\.)(pplus\.paramount\.tech|cbsaavideo\.com|cbsivideo\.com|cbs\.com)$/.test(host); } },
+    { id: "peacock", name: "Peacock", test: function (host) { return /\.cdn\.peacocktv\.com$/.test(host); } },
+    { id: "discovery", name: "Discovery+", test: function (host) { return host === "content-discovery.uplynk.com" || /dplus-ph-/.test(host); } },
+    { id: "fubo", name: "Fubo", test: function (host) { return /-vod\.fubo\.tv$/.test(host); } },
+    { id: "ted", name: "TED", test: function (host) { return host === "hls.ted.com"; } }
+  ];
+
+  function detect(url) {
+    var host = GSS.Url.host(url);
+    var path = GSS.Url.path(url);
+    for (var i = 0; i < list.length; i += 1) {
+      if (list[i].test(host, path, url)) return list[i];
+    }
+    return null;
+  }
+
+  function enabled(platform, config) {
+    if (!platform) return false;
+    var raw = String(config.platforms || "all").trim().toLowerCase();
+    if (!raw || raw === "all") return true;
+    var enabledIds = raw.split(/[,|]/).map(function (item) { return item.trim(); });
+    return enabledIds.indexOf(platform.id) >= 0;
+  }
+
+  function publicList() {
+    return list.map(function (item) { return { id: item.id, name: item.name }; });
+  }
+
+  return { detect: detect, enabled: enabled, list: publicList };
+})();
 
 GSS.GoogleTranslate = function GoogleTranslate(config, logger) {
   var endpoints = [
@@ -531,20 +658,53 @@ GSS.M3U8 = (function createM3U8Tools() {
     }).join(",");
   }
 
-  function isSourceTrack(attributes, sourceLanguage) {
-    var language = String(get(attributes, "LANGUAGE") || "").toLowerCase();
-    var name = String(get(attributes, "NAME") || "").toLowerCase();
-    var wanted = String(sourceLanguage || "en").toLowerCase();
-    return language === wanted || language.indexOf(wanted + "-") === 0 || (wanted === "en" && /\benglish\b/.test(name));
+  function candidateScore(attributes, config) {
+    var name = String(get(attributes, "NAME") || "");
+    var language = String(get(attributes, "LANGUAGE") || "");
+    var score = 0;
+    if (String(get(attributes, "DEFAULT") || "").toUpperCase() === "YES") score += 100;
+    if (String(get(attributes, "AUTOSELECT") || "").toUpperCase() === "YES") score += 10;
+    score += GSS.Language.priority(language, name, config.sourcePriority);
+    if (/\b(sdh|cc|closed captions?|descriptive|audio description)\b/i.test(name)) score -= 8;
+    return score;
   }
 
-  function duplicateTrack(line, requestUrl, mode, config) {
-    var tag = line.slice(0, line.indexOf(":"));
-    var attributes = parseAttributes(line);
+  function chooseSourceTrack(lines, config) {
+    var candidates = [];
+    lines.forEach(function (line, index) {
+      if (line.indexOf("#EXT-X-MEDIA:") !== 0) return;
+      var attributes = parseAttributes(line);
+      if (String(get(attributes, "TYPE") || "").toUpperCase() !== "SUBTITLES") return;
+      if (String(get(attributes, "FORCED") || "").toUpperCase() === "YES") return;
+      if (!get(attributes, "URI")) return;
+      var language = String(get(attributes, "LANGUAGE") || "");
+      var name = String(get(attributes, "NAME") || "");
+      if (!GSS.Language.matches(language, name, config.source)) return;
+      candidates.push({
+        index: index,
+        line: line,
+        attributes: attributes,
+        language: language,
+        name: name,
+        score: candidateScore(attributes, config)
+      });
+    });
+    if (!candidates.length) return null;
+    candidates.sort(function (a, b) {
+      if (b.score !== a.score) return b.score - a.score;
+      return a.index - b.index;
+    });
+    return candidates[0];
+  }
+
+  function duplicateTrack(candidate, requestUrl, mode, config, platform) {
+    var tag = candidate.line.slice(0, candidate.line.indexOf(":"));
+    var attributes = parseAttributes(candidate.line);
     var originalUri = get(attributes, "URI");
     if (!originalUri) return null;
     var absoluteOrigin = GSS.Url.resolve(requestUrl, originalUri);
     var name = mode === "bilingual" ? config.trackName : config.translatedTrackName;
+    var source = GSS.Language.googleSource(candidate.language, config.source);
     set(attributes, "NAME", name, true);
     set(attributes, "LANGUAGE", config.target, true);
     set(attributes, "DEFAULT", "NO", false);
@@ -553,36 +713,52 @@ GSS.M3U8 = (function createM3U8Tools() {
     set(attributes, "URI", GSS.Url.virtual(config.virtualOrigin, "/playlist", {
       origin: absoluteOrigin,
       mode: mode,
-      source: config.source,
+      source: source,
       target: config.target,
+      platform: platform ? platform.id : "unknown",
       version: GSS.VERSION
     }), true);
     return serialize(tag, attributes);
   }
 
-  function injectTracks(body, requestUrl, config, logger) {
+  function injectTracks(body, requestUrl, config, logger, platform) {
     if (!config.enabled || !body || body.indexOf("#EXTM3U") < 0) return body;
     if (body.indexOf("gss.local/playlist") >= 0) return body;
-    var lines = body.replace(/\r\n/g, "\n").split("\n"), output = [], injected = 0;
-    lines.forEach(function (line) {
+    var lines = body.replace(/\r\n/g, "\n").split("\n");
+    var selected = chooseSourceTrack(lines, config);
+    if (!selected) {
+      logger.info("master manifest inspected", {
+        platform: platform ? platform.id : "unknown",
+        injected: 0,
+        source: config.source,
+        reason: "no matching subtitle track"
+      });
+      return body;
+    }
+
+    var output = [], injected = 0;
+    lines.forEach(function (line, index) {
       output.push(line);
-      if (line.indexOf("#EXT-X-MEDIA:") !== 0) return;
-      var attributes = parseAttributes(line);
-      if (String(get(attributes, "TYPE") || "").toUpperCase() !== "SUBTITLES") return;
-      if (String(get(attributes, "FORCED") || "").toUpperCase() === "YES") return;
-      if (!get(attributes, "URI") || !isSourceTrack(attributes, config.source)) return;
-      var bilingual = duplicateTrack(line, requestUrl, "bilingual", config);
+      if (index !== selected.index) return;
+      var bilingual = duplicateTrack(selected, requestUrl, "bilingual", config, platform);
       if (bilingual) { output.push(bilingual); injected += 1; }
       if (config.injectTranslated) {
-        var translated = duplicateTrack(line, requestUrl, "translate", config);
+        var translated = duplicateTrack(selected, requestUrl, "translate", config, platform);
         if (translated) { output.push(translated); injected += 1; }
       }
     });
-    logger.info("master manifest inspected", { injected: injected, trackName: config.trackName });
+    logger.info("master manifest inspected", {
+      platform: platform ? platform.id : "unknown",
+      injected: injected,
+      trackName: config.trackName,
+      selectedName: selected.name,
+      selectedLanguage: selected.language || "auto",
+      configuredSource: config.source
+    });
     return injected ? output.join("\n") : body;
   }
 
-  function decorateSubtitlePlaylist(body, originUrl, mode, source, target, config, logger) {
+  function decorateSubtitlePlaylist(body, originUrl, mode, source, target, config, logger, platform) {
     if (!body || body.indexOf("#EXTM3U") < 0) return body;
     var changed = 0;
     var output = body.replace(/\r\n/g, "\n").split("\n").map(function (line) {
@@ -594,15 +770,17 @@ GSS.M3U8 = (function createM3U8Tools() {
         mode: mode,
         source: source,
         target: target,
+        platform: platform || "unknown",
         version: GSS.VERSION
       });
     });
-    logger.info("subtitle playlist virtualized", { segments: changed, mode: mode });
+    logger.info("subtitle playlist virtualized", { segments: changed, mode: mode, platform: platform || "unknown" });
     return changed ? output.join("\n") : body;
   }
 
   return {
     parseAttributes: parseAttributes,
+    chooseSourceTrack: chooseSourceTrack,
     injectTracks: injectTracks,
     decorateSubtitlePlaylist: decorateSubtitlePlaylist
   };
@@ -680,39 +858,64 @@ GSS.Admin = (function createAdmin() {
   function json(status, value) {
     GSS.Runtime.doneResponse(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" }, JSON.stringify(value, null, 2));
   }
+  function platformEnabled(config, id) {
+    var raw = String(config.platforms || "all").toLowerCase();
+    return raw === "all" || raw.split(",").indexOf(id) >= 0;
+  }
+  function platformControls(config) {
+    return GSS.Platforms.list().map(function (platform) {
+      return '<label class="check platform"><input type="checkbox" name="platform_' + escapeHtml(platform.id) + '" value="true"'
+        + checked(platformEnabled(config, platform.id)) + '>' + escapeHtml(platform.name) + '</label>';
+    }).join("");
+  }
   function page(config, token, message) {
     var html = '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-      + '<title>General Stream Subtitle</title><style>body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:760px;margin:32px auto;padding:0 18px;line-height:1.45;background:#f5f5f7;color:#1d1d1f}main{background:#fff;border-radius:18px;padding:22px;box-shadow:0 8px 30px rgba(0,0,0,.08)}label{display:block;margin:14px 0 6px;font-weight:600}input,select{box-sizing:border-box;width:100%;padding:11px;border:1px solid #d2d2d7;border-radius:10px;font-size:16px}.row{display:grid;grid-template-columns:1fr 1fr;gap:14px}.check{display:flex;gap:9px;align-items:center;font-weight:500}.check input{width:auto}.actions{display:flex;gap:10px;margin-top:20px;flex-wrap:wrap}button,a.button{border:0;border-radius:10px;padding:11px 16px;background:#0071e3;color:#fff;text-decoration:none;font-size:15px}.muted{color:#6e6e73;font-size:14px}.ok{background:#e8f8ed;padding:10px;border-radius:10px}@media(max-width:620px){.row{grid-template-columns:1fr}}</style></head><body><main>'
-      + '<h1>General Stream Subtitle</h1><p class="muted">v' + escapeHtml(GSS.VERSION) + ' · ' + escapeHtml(GSS.Runtime.name) + ' · Max adapter</p>'
+      + '<title>General Stream Subtitle</title><style>body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:820px;margin:32px auto;padding:0 18px;line-height:1.45;background:#f5f5f7;color:#1d1d1f}main{background:#fff;border-radius:18px;padding:22px;box-shadow:0 8px 30px rgba(0,0,0,.08)}label{display:block;margin:14px 0 6px;font-weight:600}input,select{box-sizing:border-box;width:100%;padding:11px;border:1px solid #d2d2d7;border-radius:10px;font-size:16px}.row{display:grid;grid-template-columns:1fr 1fr;gap:14px}.check{display:flex;gap:9px;align-items:center;font-weight:500;margin:8px 0}.check input{width:auto}.platforms{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 16px;padding:12px;border:1px solid #e5e5ea;border-radius:12px}.actions{display:flex;gap:10px;margin-top:20px;flex-wrap:wrap}button,a.button{border:0;border-radius:10px;padding:11px 16px;background:#0071e3;color:#fff;text-decoration:none;font-size:15px}.muted{color:#6e6e73;font-size:14px}.ok{background:#e8f8ed;padding:10px;border-radius:10px}@media(max-width:620px){.row,.platforms{grid-template-columns:1fr}}</style></head><body><main>'
+      + '<h1>General Stream Subtitle</h1><p class="muted">v' + escapeHtml(GSS.VERSION) + ' · ' + escapeHtml(GSS.Runtime.name) + ' · 多平台 HLS/WebVTT</p>'
       + (message ? '<p class="ok">' + escapeHtml(message) + '</p>' : '')
       + '<form action="/save" method="get"><input type="hidden" name="token" value="' + escapeHtml(token) + '">'
-      + '<div class="row"><div><label>源语言</label><input name="source" value="' + escapeHtml(config.source) + '"></div><div><label>目标语言</label><input name="target" value="' + escapeHtml(config.target) + '"></div></div>'
+      + '<div class="row"><div><label>源语言</label><input list="source-languages" name="source" value="' + escapeHtml(config.source) + '" placeholder="auto / en / ja / ko"><datalist id="source-languages"><option value="auto"><option value="en"><option value="ja"><option value="ko"><option value="es"><option value="fr"><option value="de"><option value="it"><option value="pt"><option value="ru"><option value="ar"></datalist><p class="muted">auto 会从非强制字幕中自动挑选一条；也可填写任意 BCP-47 语言代码。</p></div>'
+      + '<div><label>目标语言</label><input list="target-languages" name="target" value="' + escapeHtml(config.target) + '"><datalist id="target-languages"><option value="zh-CN"><option value="zh-TW"><option value="en"><option value="ja"><option value="ko"><option value="es"><option value="fr"><option value="de"></datalist></div></div>'
+      + '<label>自动选择优先级</label><input name="sourcePriority" value="' + escapeHtml(config.sourcePriority) + '"><p class="muted">仅 source=auto 时使用，逗号分隔。例如 en,ja,ko,es。</p>'
       + '<label>字幕菜单名称</label><input name="trackName" value="' + escapeHtml(config.trackName) + '">'
       + '<label>翻译引擎</label><select name="provider"><option value="google"' + selected(config.provider, 'google') + '>Google 免费兼容接口（实验性）</option></select>'
-      + '<label>双语排列</label><select name="bilingualOrder"><option value="translation-first"' + selected(config.bilingualOrder, 'translation-first') + '>中文在上</option><option value="original-first"' + selected(config.bilingualOrder, 'original-first') + '>英文在上</option></select>'
+      + '<label>双语排列</label><select name="bilingualOrder"><option value="translation-first"' + selected(config.bilingualOrder, 'translation-first') + '>译文在上</option><option value="original-first"' + selected(config.bilingualOrder, 'original-first') + '>原文在上</option></select>'
+      + '<label>启用的平台</label><div class="platforms">' + platformControls(config) + '</div>'
       + '<p class="check"><input type="checkbox" name="enabled" value="true"' + checked(config.enabled) + '>启用字幕注入</p>'
       + '<p class="check"><input type="checkbox" name="injectTranslated" value="true"' + checked(config.injectTranslated) + '>额外显示纯翻译轨</p>'
       + '<p class="check"><input type="checkbox" name="cacheEnabled" value="true"' + checked(config.cacheEnabled) + '>启用翻译缓存</p>'
       + '<p class="check"><input type="checkbox" name="debug" value="true"' + checked(config.debug) + '>启用调试日志</p>'
       + '<div class="actions"><button type="submit">保存设置</button><a class="button" href="/reset?token=' + escapeHtml(token) + '">恢复默认</a><a class="button" href="/health">运行状态</a></div></form>'
-      + '<p class="muted">保存后请完全退出并重新打开 Max，再进入字幕菜单。这个页面由代理脚本合成，并不是真的在设备上常驻监听端口。</p>'
+      + '<p class="muted">保存后请完全退出并重新打开对应流媒体 App。此页面由代理脚本合成，并非设备上的常驻服务器。</p>'
       + '</main></body></html>';
     GSS.Runtime.doneResponse(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" }, html);
   }
   function handle(url, config, logger) {
     var path = GSS.Url.path(url), query = GSS.Url.queryObject(url), token = GSS.getAdminToken();
-    if (path === "/health") { json(200, { ok: true, version: GSS.VERSION, runtime: GSS.Runtime.name, config: config }); return true; }
-    if (path === "/api/config") { json(200, { version: GSS.VERSION, runtime: GSS.Runtime.name, config: config }); return true; }
+    if (path === "/health") { json(200, { ok: true, version: GSS.VERSION, runtime: GSS.Runtime.name, platforms: GSS.Platforms.list(), config: config }); return true; }
+    if (path === "/api/config") { json(200, { version: GSS.VERSION, runtime: GSS.Runtime.name, platforms: GSS.Platforms.list(), config: config }); return true; }
     if (path === "/save") {
       if (query.token !== token) { json(403, { ok: false, error: "invalid admin token" }); return true; }
+      var platformIds = [];
+      GSS.Platforms.list().forEach(function (platform) {
+        if (query["platform_" + platform.id] === "true") platformIds.push(platform.id);
+      });
       var values = {
-        source: query.source, target: query.target, trackName: query.trackName, provider: query.provider,
-        bilingualOrder: query.bilingualOrder, enabled: query.enabled === "true",
-        injectTranslated: query.injectTranslated === "true", cacheEnabled: query.cacheEnabled === "true", debug: query.debug === "true"
+        source: query.source,
+        sourcePriority: query.sourcePriority,
+        target: query.target,
+        trackName: query.trackName,
+        provider: query.provider,
+        bilingualOrder: query.bilingualOrder,
+        platforms: platformIds.length === GSS.Platforms.list().length ? "all" : (platformIds.join(",") || "none"),
+        enabled: query.enabled === "true",
+        injectTranslated: query.injectTranslated === "true",
+        cacheEnabled: query.cacheEnabled === "true",
+        debug: query.debug === "true"
       };
       GSS.saveSettings(values);
       logger.info("settings saved", values);
-      page(GSS.getConfig(), token, "设置已保存。重新打开 Max 后生效。");
+      page(GSS.getConfig(), token, "设置已保存。重新打开流媒体 App 后生效。");
       return true;
     }
     if (path === "/reset") {
@@ -735,9 +938,13 @@ GSS.Admin = (function createAdmin() {
   var host = GSS.Url.host(requestUrl);
 
   function upstreamHeaders(response) { return (response && response.headers) || {}; }
-  function emptyVtt(reason) {
-    logger.error(reason + "; returning empty virtual subtitle");
-    GSS.Runtime.doneResponse(200, { "Content-Type": "text/vtt; charset=utf-8", "Cache-Control": "no-store" }, "WEBVTT\n\n");
+  function emptyResponse(reason) {
+    logger.error(reason + "; returning an empty virtual response");
+    if (path === "/playlist") {
+      GSS.Runtime.doneResponse(200, { "Content-Type": "application/vnd.apple.mpegurl; charset=utf-8", "Cache-Control": "no-store" }, "#EXTM3U\n#EXT-X-ENDLIST\n");
+    } else {
+      GSS.Runtime.doneResponse(200, { "Content-Type": "text/vtt; charset=utf-8", "Cache-Control": "no-store" }, "WEBVTT\n\n");
+    }
   }
 
   try {
@@ -750,41 +957,43 @@ GSS.Admin = (function createAdmin() {
     var mode = query.mode === "translate" ? "translate" : "bilingual";
     var source = query.source || config.source;
     var target = query.target || config.target;
-    if (!origin) { emptyVtt("missing origin URL"); return; }
+    var platform = query.platform || "unknown";
+    if (!origin) { emptyResponse("missing origin URL"); return; }
 
     GSS.Runtime.httpGet({ url: origin, headers: GSS.Runtime.request.headers || {} }, function (error, body, response) {
-      if (error) { emptyVtt("upstream fetch failed: " + String(error)); return; }
+      if (error) { emptyResponse("upstream fetch failed: " + String(error)); return; }
       try {
         if (path === "/playlist") {
           if (body.indexOf("#EXTM3U") >= 0) {
-            var playlist = GSS.M3U8.decorateSubtitlePlaylist(body, origin, mode, source, target, config, logger);
+            var playlist = GSS.M3U8.decorateSubtitlePlaylist(body, origin, mode, source, target, config, logger, platform);
             GSS.Runtime.doneResponse(200, GSS.Runtime.cleanHeaders(upstreamHeaders(response), "application/vnd.apple.mpegurl; charset=utf-8"), playlist);
             return;
           }
           if (body.indexOf("-->") >= 0) {
             GSS.Subtitle.translateBody(body, mode, source, target, config, logger, function (translateError, translated) {
-              if (translateError) { emptyVtt("translation failed: " + String(translateError)); return; }
+              if (translateError) { emptyResponse("translation failed: " + String(translateError)); return; }
               GSS.Runtime.doneResponse(200, GSS.Runtime.cleanHeaders(upstreamHeaders(response), "text/vtt; charset=utf-8"), translated);
             });
             return;
           }
-          emptyVtt("unsupported subtitle playlist response");
+          emptyResponse("unsupported subtitle playlist response; only HLS/WebVTT is supported");
           return;
         }
 
         if (path === "/subtitle") {
+          if (body.indexOf("-->") < 0) { emptyResponse("unsupported subtitle segment format; only WebVTT is supported"); return; }
           GSS.Subtitle.translateBody(body, mode, source, target, config, logger, function (translateError, translated) {
-            if (translateError) { emptyVtt("translation failed: " + String(translateError)); return; }
+            if (translateError) { emptyResponse("translation failed: " + String(translateError)); return; }
             GSS.Runtime.doneResponse(200, GSS.Runtime.cleanHeaders(upstreamHeaders(response), "text/vtt; charset=utf-8"), translated);
           });
           return;
         }
         GSS.Runtime.doneResponse(404, { "Content-Type": "text/plain; charset=utf-8" }, "General Stream Subtitle: route not found");
-      } catch (processingError) { emptyVtt("gateway processing failed: " + String(processingError)); }
+      } catch (processingError) { emptyResponse("gateway processing failed: " + String(processingError)); }
     });
   } catch (error) {
     logger.error("gateway failed", { error: String(error), stack: error && error.stack });
-    emptyVtt("gateway exception");
+    emptyResponse("gateway exception");
   }
 })();
 })();
