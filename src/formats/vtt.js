@@ -2,19 +2,37 @@ GSS.VTT = (function createVTTTools() {
   function stripTags(text) {
     return String(text || "").replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim();
   }
+
   function parse(body) {
     var normalized = String(body || "").replace(/^\uFEFF/, "").replace(/\r\n/g, "\n");
-    var blocks = normalized.split(/\n{2,}/), cues = [];
-    blocks.forEach(function (block, blockIndex) {
-      var lines = block.split("\n"), timestampIndex = -1;
-      for (var i = 0; i < lines.length; i += 1) if (lines[i].indexOf("-->") >= 0) { timestampIndex = i; break; }
-      if (timestampIndex < 0 || timestampIndex >= lines.length - 1) return;
-      var originalLines = lines.slice(timestampIndex + 1), plain = stripTags(originalLines.join("\n"));
-      if (!plain) return;
-      cues.push({ blockIndex: blockIndex, timestampIndex: timestampIndex, originalLines: originalLines, text: plain });
-    });
-    return { blocks: blocks, cues: cues };
+    var lines = normalized.split("\n"), cues = [];
+    var timestamps = [];
+
+    for (var i = 0; i < lines.length; i += 1) {
+      if (lines[i].indexOf("-->") >= 0) timestamps.push(i);
+    }
+
+    for (var t = 0; t < timestamps.length; t += 1) {
+      var timestampLine = timestamps[t];
+      var startLine = timestampLine + 1;
+      var endLine = t + 1 < timestamps.length ? timestamps[t + 1] : lines.length;
+      while (endLine > startLine && !lines[endLine - 1].trim()) endLine -= 1;
+      var originalLines = lines.slice(startLine, endLine);
+      var plain = stripTags(originalLines.join("\n"));
+      if (plain) {
+        cues.push({
+          timestampLine: timestampLine,
+          startLine: startLine,
+          endLine: endLine,
+          originalLines: originalLines,
+          text: plain
+        });
+      }
+    }
+
+    return { lines: lines, cues: cues };
   }
+
   function uniqueTexts(cues) {
     var texts = [], indexes = {};
     cues.forEach(function (cue) {
@@ -23,22 +41,26 @@ GSS.VTT = (function createVTTTools() {
     });
     return texts;
   }
+
   function render(parsed, translations, mode, order) {
-    parsed.cues.forEach(function (cue) {
-      var blockLines = parsed.blocks[cue.blockIndex].split("\n");
+    var lines = parsed.lines.slice();
+    var cues = parsed.cues.slice().sort(function (a, b) { return b.startLine - a.startLine; });
+    cues.forEach(function (cue) {
       var translated = String(translations[cue.translationIndex] || "").trim();
       if (!translated) return;
       var replacement;
       if (mode === "bilingual") {
-        replacement = order === "original-first" ? cue.originalLines.concat([translated]) : [translated].concat(cue.originalLines);
+        replacement = order === "original-first"
+          ? cue.originalLines.concat(translated.split("\n"))
+          : translated.split("\n").concat(cue.originalLines);
       } else replacement = translated.split("\n");
-      parsed.blocks[cue.blockIndex] = blockLines.slice(0, cue.timestampIndex + 1).concat(replacement).join("\n");
+      lines.splice.apply(lines, [cue.startLine, Math.max(0, cue.endLine - cue.startLine)].concat(replacement));
     });
-    return parsed.blocks.join("\n\n");
+    return lines.join("\n");
   }
+
   return { parse: parse, uniqueTexts: uniqueTexts, render: render, stripTags: stripTags };
 })();
-
 
 GSS.Formats.register("vtt", {
   id: "vtt", name: "WebVTT", contentType: "text/vtt; charset=utf-8",
