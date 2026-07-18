@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.1
+
+- Set injected translation tracks to `AUTOSELECT=NO` so Chinese-language Apple devices do not start live translation before the user selects the track.
+- Fast-pass HLS media playlists to reduce overhead on frequently refreshed live streams such as Pluto TV.
+- Add a Max-specific response rule for extensionless manifest, playlist, playback, HLS and DASH URLs.
+- Log whether a manifest has no subtitle renditions, unmatched text subtitles, or only in-band CEA closed captions.
+
 ## 0.5.0 Pluto hotfix
 
 - Fix Pluto TV translated tracks disappearing when upstream subtitle requests require Pluto origin headers.

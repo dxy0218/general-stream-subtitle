@@ -1,6 +1,6 @@
 {
   "name": "general-stream-subtitle",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": true,
   "description": "Modular multi-platform subtitle middleware with YouTube/YouTube TV captions, HLS/DASH adapters, multiple text formats, and pluggable translation providers.",
   "type": "module",
