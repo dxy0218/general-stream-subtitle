@@ -1,20 +1,24 @@
 # Architecture
 
-General Stream Subtitle keeps platform matching separate from subtitle processing.
+```text
+Platform adapter
+  ├─ HLS manifest adapter
+  ├─ experimental simple DASH adapter
+  └─ YouTube player/caption adapter
+        ↓
+Virtual gss.local subtitle URL or direct timedtext interception
+        ↓
+Format registry
+  ├─ YouTube timedtext / JSON3 / srv3
+  ├─ WebVTT
+  ├─ SRT
+  ├─ TTML/DFXP/IMSC Text
+  ├─ ASS/SSA
+  └─ JSON cues
+        ↓
+Provider registry and fallback chain
+        ↓
+Format renderer → translated or bilingual subtitle
+```
 
-## Runtime bundles
-
-- `manifest.js`: response hook for known HLS master-manifest domains.
-- `gateway.js`: request hook for virtual subtitle playlists, subtitle segments and the settings page.
-
-## Source modules
-
-- `src/platforms/registry.js`: platform detection and enable/disable logic.
-- `src/shared/language.js`: language normalization, aliases, matching and automatic priority.
-- `src/manifest/m3u8.js`: generic HLS subtitle-track selection and virtual-track injection.
-- `src/subtitle/*`: WebVTT parsing and translation rendering.
-- `src/gateway/*`: synthetic `gss.local` responses and settings UI.
-
-Platform adapters do not contain subtitle parsing logic. A platform is supported by the generic path only when its master manifest exposes subtitle tracks through `#EXT-X-MEDIA:TYPE=SUBTITLES` and its subtitle payload is HLS/WebVTT.
-
-The proxy tool returns synthetic responses for `https://gss.local`, so original signed CDN URLs remain unchanged. Future translation providers should implement the same interface used by `GSS.GoogleTranslate`. DASH/MPD, TTML/IMSC and non-HLS platforms should be added as separate parser modules rather than enlarging the HLS adapter with special cases.
+Source files stay modular. GitHub Actions can produce runtime bundles; the checked-in runtime may use a versioned cached loader during development releases.

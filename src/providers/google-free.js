@@ -1,4 +1,4 @@
-GSS.GoogleTranslate = function GoogleTranslate(config, logger) {
+GSS.Providers.register("google-free", { name: "Google 免费兼容接口", kind: "free", requiresKey: false, experimental: true }, function (config, logger) {
   var endpoints = [
     "https://translate.googleapis.com/translate_a/single",
     "https://translate.google.com/translate_a/single"
@@ -107,5 +107,5 @@ GSS.GoogleTranslate = function GoogleTranslate(config, logger) {
     next();
   }
 
-  return { translateMany: translateMany };
-};
+  return { ready: function () { return true; }, translateMany: translateMany };
+});

@@ -38,3 +38,13 @@ GSS.VTT = (function createVTTTools() {
   }
   return { parse: parse, uniqueTexts: uniqueTexts, render: render, stripTags: stripTags };
 })();
+
+
+GSS.Formats.register("vtt", {
+  id: "vtt", name: "WebVTT", contentType: "text/vtt; charset=utf-8",
+  detect: function (body, url, contentType) {
+    return /^\s*WEBVTT/i.test(String(body || "")) || /text\/vtt/i.test(String(contentType || "")) || /\.(vtt|webvtt)$/i.test(String(url || "").split(/[?#]/)[0]);
+  },
+  parse: GSS.VTT.parse,
+  render: GSS.VTT.render
+});

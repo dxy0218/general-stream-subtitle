@@ -3,17 +3,22 @@
   var logger = GSS.Logger(config, "manifest");
   try {
     var body = GSS.Runtime.response.body || "";
-    var url = GSS.Runtime.request.url || "";
-    if (!config.enabled || body.indexOf("#EXTM3U") < 0) { GSS.Runtime.passThrough(); return; }
-    var platform = GSS.Platforms.detect(url);
-    if (!platform || !GSS.Platforms.enabled(platform, config)) {
-      logger.debug("manifest ignored", { url: url, platform: platform ? platform.id : "unknown" });
-      GSS.Runtime.passThrough();
-      return;
+    if (!config.enabled) { GSS.Runtime.passThrough(); return; }
+    var platform = GSS.Platforms.detect(GSS.Runtime.request.url || "", config);
+    if (!platform || !GSS.Platforms.enabled(platform, config)) { GSS.Runtime.passThrough(); return; }
+    var output = body;
+    var contentType = "";
+    if (body.indexOf("#EXTM3U") >= 0) {
+      output = GSS.M3U8.injectTracks(body, GSS.Runtime.request.url || "", config, logger, platform);
+      contentType = "application/vnd.apple.mpegurl; charset=utf-8";
+    } else if (/<MPD\b/i.test(body)) {
+      output = GSS.MPD.injectTrack(body, GSS.Runtime.request.url || "", config, logger, platform);
+      contentType = "application/dash+xml; charset=utf-8";
+    } else {
+      GSS.Runtime.passThrough(); return;
     }
-    var output = GSS.M3U8.injectTracks(body, url, config, logger, platform);
     if (output === body) GSS.Runtime.passThrough();
-    else GSS.Runtime.doneBody(output, GSS.Runtime.response.headers, "application/vnd.apple.mpegurl; charset=utf-8");
+    else GSS.Runtime.doneBody(output, GSS.Runtime.response.headers, contentType);
   } catch (error) {
     logger.error("manifest processing failed; original response preserved", { error: String(error), stack: error && error.stack });
     GSS.Runtime.passThrough();

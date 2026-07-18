@@ -1,0 +1,4 @@
+<?xml version="1.0"?><MPD xmlns="urn:mpeg:dash:schema:mpd:2011" type="static">
+<Period><AdaptationSet id="1" contentType="video"><Representation id="v"><BaseURL>video.mp4</BaseURL></Representation></AdaptationSet>
+<AdaptationSet id="2" contentType="text" mimeType="text/vtt" lang="en"><Label>English</Label><Representation id="s"><BaseURL>subs/en.vtt?token=abc</BaseURL></Representation></AdaptationSet>
+</Period></MPD>

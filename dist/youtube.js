@@ -1,16 +1,16 @@
-// General Stream Subtitle 0.5.0 - cached modular loader (manifest)
+// General Stream Subtitle 0.5.0 - cached modular loader (youtube)
 (function () {
   "use strict";
   var VERSION = "0.5.0";
-  var KEY = "GSS_SOURCE_BUNDLE_MANIFEST_" + VERSION;
+  var KEY = "GSS_SOURCE_BUNDLE_YOUTUBE_" + VERSION;
   var BASE = "https://raw.githubusercontent.com/dxy0218/general-stream-subtitle/main/";
-  var FILES = ["src/shared/runtime.js", "src/shared/cache.js", "src/shared/language.js", "src/shared/config.js", "src/shared/logger.js", "src/shared/url.js", "src/formats/registry.js", "src/platforms/registry.js", "src/formats/youtube.js", "src/formats/vtt.js", "src/formats/srt.js", "src/formats/ttml.js", "src/formats/ass.js", "src/formats/json.js", "src/manifest/m3u8.js", "src/manifest/mpd.js", "src/manifest/main.js"];
+  var FILES = ["src/shared/runtime.js", "src/shared/cache.js", "src/shared/language.js", "src/shared/config.js", "src/shared/logger.js", "src/shared/url.js", "src/formats/registry.js", "src/platforms/registry.js", "src/youtube/player.js", "src/youtube/main.js"];
   var LIMIT = 6;
   function finish(payload) { if (typeof $done === "function") $done(payload || {}); }
   function read() { try { return $persistentStore && $persistentStore.read(KEY); } catch (_) { return null; } }
   function write(value) { try { return $persistentStore && $persistentStore.write(value, KEY); } catch (_) { return false; } }
   function fail(message) {
-    console.log("[GSS loader][manifest] " + message);
+    console.log("[GSS loader][youtube] " + message);
     if (false) finish({ response: { status: 503, headers: { "Content-Type": "text/plain; charset=utf-8" }, body: "General Stream Subtitle source unavailable" } });
     else finish({});
   }
