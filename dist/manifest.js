@@ -1,4 +1,4 @@
-// General Stream Subtitle 0.5.1 - manifest
+// General Stream Subtitle 0.5.2 - manifest
 // MIT License - generated file; edit src/ instead.
 (function () {
 "use strict";
@@ -231,7 +231,7 @@ GSS.Language = (function createLanguageTools() {
   };
 })();
 
-GSS.VERSION = "0.5.1";
+GSS.VERSION = "0.5.2";
 GSS.SETTINGS_KEY = "GSS_SETTINGS_V4";
 GSS.PROVIDER_SECRETS_KEY = "GSS_PROVIDER_SECRETS_V1";
 GSS.ADMIN_TOKEN_KEY = "GSS_ADMIN_TOKEN_V1";
@@ -475,6 +475,60 @@ GSS.Url = {
   }
 };
 
+GSS.Diagnostics = (function createDiagnostics() {
+  var KEY = "GSS_DIAGNOSTICS_V1";
+  var LIMIT = 30;
+
+  function readAll() {
+    try {
+      var parsed = JSON.parse(GSS.Runtime.read(KEY) || "[]");
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (_) { return []; }
+  }
+
+  function safeUrl(url) {
+    var host = GSS.Url.host(url);
+    var path = GSS.Url.path(url);
+    if (path.length > 180) path = path.slice(0, 177) + "...";
+    return host ? "https://" + host + path : String(url || "").split("?")[0].slice(0, 220);
+  }
+
+  function cleanValue(value, depth) {
+    if (depth > 3) return undefined;
+    if (value === null || value === undefined) return value;
+    if (typeof value === "string") return value.length > 240 ? value.slice(0, 237) + "..." : value;
+    if (typeof value === "number" || typeof value === "boolean") return value;
+    if (Array.isArray(value)) return value.slice(0, 12).map(function (item) { return cleanValue(item, depth + 1); });
+    if (typeof value === "object") {
+      var output = {};
+      Object.keys(value).slice(0, 20).forEach(function (key) {
+        if (/token|authorization|cookie|signature|policy|key/i.test(key)) return;
+        var cleaned = cleanValue(value[key], depth + 1);
+        if (cleaned !== undefined) output[key] = cleaned;
+      });
+      return output;
+    }
+    return String(value);
+  }
+
+  function record(event) {
+    try {
+      var rows = readAll();
+      var row = cleanValue(event || {}, 0) || {};
+      row.time = new Date().toISOString();
+      if (row.url) row.url = safeUrl(row.url);
+      rows.unshift(row);
+      if (rows.length > LIMIT) rows.length = LIMIT;
+      GSS.Runtime.write(JSON.stringify(rows), KEY);
+    } catch (_) {}
+  }
+
+  function list() { return readAll(); }
+  function clear() { return GSS.Runtime.write("[]", KEY); }
+
+  return { record: record, list: list, clear: clear, key: KEY };
+})();
+
 GSS.Formats = (function createFormatRegistry() {
   var registry = {};
   function register(id, format) { registry[id] = format; }
@@ -518,7 +572,8 @@ GSS.Platforms = (function createPlatformRegistry() {
     { id: "disney", name: "Disney+", maturity: "stable", test: function (host) { return /\.(media|prod)\.(dssott|starott|dssedge)\.com$/.test(host); } },
     { id: "prime", name: "Prime Video", maturity: "stable", test: function (host) { return /(\.hls\.(pv-cdn|row\.aiv-cdn)\.net$|avodhlss3ww-a\.akamaihd\.net$|^s3\.amazonaws\.com$|^cf-timedtext\.aux\.pv-cdn\.net$|^(d1v5ir2lpwr8os|d22qjgkvxw22r6|d25xi40x97liuc|d27xxe7juh1us6|dmqdd6hw24ucf)\.cloudfront\.net$)/.test(host); } },
     { id: "hulu", name: "Hulu", maturity: "stable", test: function (host) { return /(^|\.)(hulustream\.com|huluim\.com)$/.test(host) || host === "assetshuluimcom-a.akamaihd.net"; } },
-    { id: "paramount", name: "Paramount+", maturity: "stable", test: function (host) { return /(^|\.)(pplus\.paramount\.tech|cbsaavideo\.com|cbsivideo\.com|cbs\.com)$/.test(host); } },
+    { id: "paramount-live", name: "Paramount+ Live TV", maturity: "experimental", test: function (host, path, url) { return /(^|\.)(pplus\.paramount\.tech|paramount\.tech|paramountplus\.com|cbsaavideo\.com|cbsivideo\.com|cbs\.com)$/.test(host) && /(live|linear|channel|station|stream|broadcast)/i.test(String(path || "") + " " + String(url || "")); } },
+    { id: "paramount", name: "Paramount+", maturity: "stable", test: function (host) { return /(^|\.)(pplus\.paramount\.tech|paramount\.tech|paramountplus\.com|cbsaavideo\.com|cbsivideo\.com|cbs\.com)$/.test(host); } },
     { id: "peacock", name: "Peacock", maturity: "stable", test: function (host) { return /\.cdn\.peacocktv\.com$/.test(host); } },
     { id: "discovery", name: "Discovery+", maturity: "stable", test: function (host) { return host === "content-discovery.uplynk.com" || /dplus-ph-/.test(host); } },
     { id: "fubo", name: "Fubo", maturity: "stable", test: function (host) { return /-vod\.fubo\.tv$/.test(host); } },
@@ -851,6 +906,166 @@ GSS.Formats.register("json", (function createJsonFormat() {
   return { id: "json", name: "Generic JSON Cues", contentType: "application/json; charset=utf-8", detect: detect, parse: parse, render: render };
 })());
 
+GSS.PlaybackJson = (function createPlaybackJsonAdapter() {
+  var SPECIFIC_ARRAY = /^(subtitles?|subtitleTracks?|textTracks?|captionTracks?|captions?|closedCaptions?)$/i;
+  var GENERIC_ARRAY = /^(tracks?|renditions?|mediaTracks?|assets?)$/i;
+  var URL_KEYS = ["url", "uri", "src", "source", "baseUrl", "downloadUrl", "manifestUrl", "file"];
+  var LANGUAGE_KEYS = ["language", "lang", "languageCode", "srclang", "locale"];
+  var LABEL_KEYS = ["label", "name", "displayName", "title"];
+  var ID_KEYS = ["id", "trackId", "assetId", "renditionId"];
+
+  function firstString(object, keys) {
+    for (var i = 0; i < keys.length; i += 1) {
+      if (typeof object[keys[i]] === "string" && object[keys[i]]) return { key: keys[i], value: object[keys[i]] };
+    }
+    return null;
+  }
+
+  function descriptor(item) {
+    return [item.kind, item.type, item.role, item.format, item.mimeType, item.codec, item.label, item.name]
+      .filter(function (value) { return typeof value === "string"; }).join(" ");
+  }
+
+  function isTextTrack(item, parentKey) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return false;
+    var url = firstString(item, URL_KEYS);
+    if (!url) return false;
+    if (SPECIFIC_ARRAY.test(parentKey)) return true;
+    var details = descriptor(item);
+    if (/(subtitle|caption|closed.?caption|text|webvtt|vtt|ttml|dfxp|imsc|srt)/i.test(details)) return true;
+    var extension = GSS.Url.extension(url.value);
+    return /^(vtt|srt|ttml|dfxp|xml|json)$/.test(extension);
+  }
+
+  function languageOf(item) {
+    var found = firstString(item, LANGUAGE_KEYS);
+    return found ? found.value : "";
+  }
+
+  function labelOf(item) {
+    var found = firstString(item, LABEL_KEYS);
+    return found ? found.value : "";
+  }
+
+  function score(item, config) {
+    var language = languageOf(item), label = labelOf(item), value = 0;
+    value += GSS.Language.priority(language, label, config.sourcePriority);
+    if (item.default === true || item.isDefault === true || item.selected === true) value += 80;
+    if (/forced/i.test(descriptor(item))) value -= 100;
+    if (/(sdh|closed.?caption|cc)/i.test(label)) value -= 4;
+    return value;
+  }
+
+  function choose(array, parentKey, config) {
+    var candidates = [];
+    array.forEach(function (item, index) {
+      if (!isTextTrack(item, parentKey)) return;
+      var language = languageOf(item), label = labelOf(item);
+      if (!GSS.Language.matches(language, label, config.source)) return;
+      candidates.push({ item: item, index: index, score: score(item, config) });
+    });
+    candidates.sort(function (a, b) { return b.score - a.score || a.index - b.index; });
+    return candidates[0] || null;
+  }
+
+  function setExistingOrDefault(object, keys, value, fallbackKey) {
+    var changed = false;
+    keys.forEach(function (key) {
+      if (Object.prototype.hasOwnProperty.call(object, key)) { object[key] = value; changed = true; }
+    });
+    if (!changed && fallbackKey) object[fallbackKey] = value;
+  }
+
+  function routeFor(item, origin) {
+    var details = descriptor(item);
+    return GSS.Url.extension(origin) === "m3u8" || /hls/i.test(details) ? "/playlist" : "/subtitle";
+  }
+
+  function duplicate(item, requestUrl, config, platform) {
+    var cloned = JSON.parse(JSON.stringify(item));
+    var urlField = firstString(cloned, URL_KEYS);
+    if (!urlField) return null;
+    var absolute = GSS.Url.resolve(requestUrl, urlField.value);
+    cloned[urlField.key] = GSS.Url.virtual(config.virtualOrigin, routeFor(cloned, absolute), {
+      origin: absolute,
+      mode: "bilingual",
+      source: GSS.Language.googleSource(languageOf(cloned), config.source),
+      target: config.target,
+      platform: platform ? platform.id : "unknown",
+      version: GSS.VERSION
+    });
+    setExistingOrDefault(cloned, LABEL_KEYS, config.trackName, "label");
+    setExistingOrDefault(cloned, LANGUAGE_KEYS, config.target, "language");
+    ID_KEYS.forEach(function (key) {
+      if (typeof cloned[key] === "string" || typeof cloned[key] === "number") cloned[key] = String(cloned[key]) + "-gss";
+    });
+    ["default", "isDefault", "selected", "autoSelect", "autoselect", "forced", "isForced"].forEach(function (key) {
+      if (Object.prototype.hasOwnProperty.call(cloned, key)) cloned[key] = false;
+    });
+    cloned.gssTranslated = true;
+    return cloned;
+  }
+
+  function hasInjected(array, config) {
+    return array.some(function (item) {
+      return item && typeof item === "object" && (item.gssTranslated === true || labelOf(item) === config.trackName);
+    });
+  }
+
+  function inject(body, requestUrl, config, logger, platform) {
+    var value;
+    try { value = JSON.parse(String(body || "")); }
+    catch (_) { return { body: body, changed: false, summary: { reason: "invalid json" } }; }
+
+    var summary = { arraysInspected: 0, textTracks: 0, arraysChanged: 0, injected: 0, selectedLanguage: "", selectedName: "" };
+    var maxInjections = 4;
+
+    function walk(node, key, depth) {
+      if (!node || depth > 9 || summary.injected >= maxInjections) return;
+      if (Array.isArray(node)) {
+        var relevantKey = SPECIFIC_ARRAY.test(key || "") || GENERIC_ARRAY.test(key || "");
+        if (relevantKey) {
+          summary.arraysInspected += 1;
+          var count = node.filter(function (item) { return isTextTrack(item, key || ""); }).length;
+          summary.textTracks += count;
+          if (count && !hasInjected(node, config)) {
+            var selected = choose(node, key || "", config);
+            if (selected) {
+              var cloned = duplicate(selected.item, requestUrl, config, platform);
+              if (cloned) {
+                node.splice(selected.index + 1, 0, cloned);
+                summary.arraysChanged += 1;
+                summary.injected += 1;
+                summary.selectedLanguage = languageOf(selected.item) || "auto";
+                summary.selectedName = labelOf(selected.item) || "";
+              }
+            }
+          }
+        }
+        node.forEach(function (item) { walk(item, key, depth + 1); });
+        return;
+      }
+      if (typeof node === "object") {
+        Object.keys(node).forEach(function (childKey) { walk(node[childKey], childKey, depth + 1); });
+      }
+    }
+
+    walk(value, "", 0);
+    if (summary.injected) {
+      logger.info("playback JSON inspected", {
+        platform: platform ? platform.id : "unknown", injected: summary.injected,
+        selectedName: summary.selectedName, selectedLanguage: summary.selectedLanguage
+      });
+      return { body: JSON.stringify(value), changed: true, summary: summary };
+    }
+    summary.reason = summary.textTracks ? "no matching text track" : "no supported text-track array";
+    logger.info("playback JSON inspected", { platform: platform ? platform.id : "unknown", injected: 0, reason: summary.reason, arrays: summary.arraysInspected, textTracks: summary.textTracks });
+    return { body: body, changed: false, summary: summary };
+  }
+
+  return { inject: inject };
+})();
+
 GSS.M3U8 = (function createM3U8Tools() {
   function parseAttributes(line) {
     var colon = line.indexOf(":"), source = colon >= 0 ? line.slice(colon + 1) : line;
@@ -1138,26 +1353,52 @@ GSS.MPD = (function createMpdTools() {
 (function manifestEntry() {
   var config = GSS.getConfig();
   var logger = GSS.Logger(config, "manifest");
+
+  function record(platform, type, changed, details) {
+    if (!GSS.Diagnostics) return;
+    GSS.Diagnostics.record({
+      scope: "manifest",
+      url: GSS.Runtime.request.url || "",
+      platform: platform ? platform.id : "unknown",
+      type: type,
+      changed: !!changed,
+      details: details || {}
+    });
+  }
+
   try {
     var body = GSS.Runtime.response.body || "";
     if (!config.enabled) { GSS.Runtime.passThrough(); return; }
-    var platform = GSS.Platforms.detect(GSS.Runtime.request.url || "", config);
+    var requestUrl = GSS.Runtime.request.url || "";
+    var platform = GSS.Platforms.detect(requestUrl, config);
     if (!platform || !GSS.Platforms.enabled(platform, config)) { GSS.Runtime.passThrough(); return; }
     var output = body;
     var contentType = "";
+
     if (body.indexOf("#EXTM3U") >= 0) {
-      output = GSS.M3U8.injectTracks(body, GSS.Runtime.request.url || "", config, logger, platform);
+      var media = GSS.M3U8.isMediaPlaylist(body);
+      var summary = GSS.M3U8.inspectTrackTypes(body.replace(/\r\n/g, "\n").split("\n"));
+      output = GSS.M3U8.injectTracks(body, requestUrl, config, logger, platform);
       contentType = "application/vnd.apple.mpegurl; charset=utf-8";
+      record(platform, media ? "hls-media" : "hls-master", output !== body, summary);
     } else if (/<MPD\b/i.test(body)) {
-      output = GSS.MPD.injectTrack(body, GSS.Runtime.request.url || "", config, logger, platform);
+      output = GSS.MPD.injectTrack(body, requestUrl, config, logger, platform);
       contentType = "application/dash+xml; charset=utf-8";
+      record(platform, "dash", output !== body, {});
+    } else if (/^\s*[\[{]/.test(body) && /^(max|paramount|paramount-live)$/.test(platform.id)) {
+      var jsonResult = GSS.PlaybackJson.inject(body, requestUrl, config, logger, platform);
+      output = jsonResult.body;
+      contentType = "application/json; charset=utf-8";
+      record(platform, "playback-json", jsonResult.changed, jsonResult.summary);
     } else {
+      record(platform, "unsupported-response", false, { prefix: String(body).slice(0, 32) });
       GSS.Runtime.passThrough(); return;
     }
     if (output === body) GSS.Runtime.passThrough();
     else GSS.Runtime.doneBody(output, GSS.Runtime.response.headers, contentType);
   } catch (error) {
     logger.error("manifest processing failed; original response preserved", { error: String(error), stack: error && error.stack });
+    if (GSS.Diagnostics) GSS.Diagnostics.record({ scope: "manifest", url: GSS.Runtime.request.url || "", type: "exception", error: String(error) });
     GSS.Runtime.passThrough();
   }
 })();

@@ -1,4 +1,4 @@
-// General Stream Subtitle 0.5.1 - youtube
+// General Stream Subtitle 0.5.2 - youtube
 // MIT License - generated file; edit src/ instead.
 (function () {
 "use strict";
@@ -231,7 +231,7 @@ GSS.Language = (function createLanguageTools() {
   };
 })();
 
-GSS.VERSION = "0.5.1";
+GSS.VERSION = "0.5.2";
 GSS.SETTINGS_KEY = "GSS_SETTINGS_V4";
 GSS.PROVIDER_SECRETS_KEY = "GSS_PROVIDER_SECRETS_V1";
 GSS.ADMIN_TOKEN_KEY = "GSS_ADMIN_TOKEN_V1";
@@ -475,6 +475,60 @@ GSS.Url = {
   }
 };
 
+GSS.Diagnostics = (function createDiagnostics() {
+  var KEY = "GSS_DIAGNOSTICS_V1";
+  var LIMIT = 30;
+
+  function readAll() {
+    try {
+      var parsed = JSON.parse(GSS.Runtime.read(KEY) || "[]");
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (_) { return []; }
+  }
+
+  function safeUrl(url) {
+    var host = GSS.Url.host(url);
+    var path = GSS.Url.path(url);
+    if (path.length > 180) path = path.slice(0, 177) + "...";
+    return host ? "https://" + host + path : String(url || "").split("?")[0].slice(0, 220);
+  }
+
+  function cleanValue(value, depth) {
+    if (depth > 3) return undefined;
+    if (value === null || value === undefined) return value;
+    if (typeof value === "string") return value.length > 240 ? value.slice(0, 237) + "..." : value;
+    if (typeof value === "number" || typeof value === "boolean") return value;
+    if (Array.isArray(value)) return value.slice(0, 12).map(function (item) { return cleanValue(item, depth + 1); });
+    if (typeof value === "object") {
+      var output = {};
+      Object.keys(value).slice(0, 20).forEach(function (key) {
+        if (/token|authorization|cookie|signature|policy|key/i.test(key)) return;
+        var cleaned = cleanValue(value[key], depth + 1);
+        if (cleaned !== undefined) output[key] = cleaned;
+      });
+      return output;
+    }
+    return String(value);
+  }
+
+  function record(event) {
+    try {
+      var rows = readAll();
+      var row = cleanValue(event || {}, 0) || {};
+      row.time = new Date().toISOString();
+      if (row.url) row.url = safeUrl(row.url);
+      rows.unshift(row);
+      if (rows.length > LIMIT) rows.length = LIMIT;
+      GSS.Runtime.write(JSON.stringify(rows), KEY);
+    } catch (_) {}
+  }
+
+  function list() { return readAll(); }
+  function clear() { return GSS.Runtime.write("[]", KEY); }
+
+  return { record: record, list: list, clear: clear, key: KEY };
+})();
+
 GSS.Formats = (function createFormatRegistry() {
   var registry = {};
   function register(id, format) { registry[id] = format; }
@@ -518,7 +572,8 @@ GSS.Platforms = (function createPlatformRegistry() {
     { id: "disney", name: "Disney+", maturity: "stable", test: function (host) { return /\.(media|prod)\.(dssott|starott|dssedge)\.com$/.test(host); } },
     { id: "prime", name: "Prime Video", maturity: "stable", test: function (host) { return /(\.hls\.(pv-cdn|row\.aiv-cdn)\.net$|avodhlss3ww-a\.akamaihd\.net$|^s3\.amazonaws\.com$|^cf-timedtext\.aux\.pv-cdn\.net$|^(d1v5ir2lpwr8os|d22qjgkvxw22r6|d25xi40x97liuc|d27xxe7juh1us6|dmqdd6hw24ucf)\.cloudfront\.net$)/.test(host); } },
     { id: "hulu", name: "Hulu", maturity: "stable", test: function (host) { return /(^|\.)(hulustream\.com|huluim\.com)$/.test(host) || host === "assetshuluimcom-a.akamaihd.net"; } },
-    { id: "paramount", name: "Paramount+", maturity: "stable", test: function (host) { return /(^|\.)(pplus\.paramount\.tech|cbsaavideo\.com|cbsivideo\.com|cbs\.com)$/.test(host); } },
+    { id: "paramount-live", name: "Paramount+ Live TV", maturity: "experimental", test: function (host, path, url) { return /(^|\.)(pplus\.paramount\.tech|paramount\.tech|paramountplus\.com|cbsaavideo\.com|cbsivideo\.com|cbs\.com)$/.test(host) && /(live|linear|channel|station|stream|broadcast)/i.test(String(path || "") + " " + String(url || "")); } },
+    { id: "paramount", name: "Paramount+", maturity: "stable", test: function (host) { return /(^|\.)(pplus\.paramount\.tech|paramount\.tech|paramountplus\.com|cbsaavideo\.com|cbsivideo\.com|cbs\.com)$/.test(host); } },
     { id: "peacock", name: "Peacock", maturity: "stable", test: function (host) { return /\.cdn\.peacocktv\.com$/.test(host); } },
     { id: "discovery", name: "Discovery+", maturity: "stable", test: function (host) { return host === "content-discovery.uplynk.com" || /dplus-ph-/.test(host); } },
     { id: "fubo", name: "Fubo", maturity: "stable", test: function (host) { return /-vod\.fubo\.tv$/.test(host); } },
