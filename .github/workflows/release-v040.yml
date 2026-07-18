@@ -33,3 +33,4 @@ jobs:
           git add -A
           git commit -m "Release General Stream Subtitle v0.4.0"
           git push
+# retrigger after archive completion
