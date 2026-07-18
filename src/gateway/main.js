@@ -57,7 +57,7 @@
   }
 
   try {
-    var isAdminHost = host === "gss.local" || host === "127.0.0.1" || host === "localhost";
+    var isAdminHost = host === "gss.local" || host === "gss.localhost" || host === "127.0.0.1" || host === "localhost";
     if (isAdminHost && GSS.Admin.handle(requestUrl, config, logger)) return;
     if (host !== "gss.local") { GSS.Runtime.passThrough(); return; }
 
