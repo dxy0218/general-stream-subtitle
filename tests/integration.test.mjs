@@ -53,6 +53,18 @@ test("gateway translates WebVTT through Google free provider", () => {
   assert.match(result.response.body,/你好吗？\n<v Speaker>How are you\?<\/v>/);
 });
 
+test("gss.localhost serves the diagnostics endpoint without DNS", () => {
+  const store=new Map(); let result;
+  run("dist/gateway.js",{
+    $request:{url:"http://gss.localhost/diagnostics",method:"GET",headers:{}},
+    $persistentStore:{read(k){return store.get(k)||null;},write(v,k){store.set(k,v);return true;}},
+    $done(p){result=p;}
+  });
+  assert.equal(result.response.status,200);
+  assert.match(result.response.body,/"version":"0\.5\.3"/);
+  assert.match(result.response.body,/"records":\[\]/);
+});
+
 test("admin POST saves provider, formats, platforms, and API key without exposing it", () => {
   const store=new Map([["GSS_ADMIN_TOKEN_V1","abc"]]); let result;
   const body = [
