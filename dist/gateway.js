@@ -1,4 +1,4 @@
-// General Stream Subtitle 0.5.0 - gateway
+// General Stream Subtitle 0.5.1 - gateway
 // MIT License - generated file; edit src/ instead.
 (function () {
 "use strict";
@@ -231,7 +231,7 @@ GSS.Language = (function createLanguageTools() {
   };
 })();
 
-GSS.VERSION = "0.5.0";
+GSS.VERSION = "0.5.1";
 GSS.SETTINGS_KEY = "GSS_SETTINGS_V4";
 GSS.PROVIDER_SECRETS_KEY = "GSS_PROVIDER_SECRETS_V1";
 GSS.ADMIN_TOKEN_KEY = "GSS_ADMIN_TOKEN_V1";
@@ -1288,7 +1288,7 @@ GSS.M3U8 = (function createM3U8Tools() {
     set(attributes, "NAME", name, true);
     set(attributes, "LANGUAGE", config.target, true);
     set(attributes, "DEFAULT", "NO", false);
-    set(attributes, "AUTOSELECT", "YES", false);
+    set(attributes, "AUTOSELECT", "NO", false);
     set(attributes, "FORCED", "NO", false);
     set(attributes, "URI", GSS.Url.virtual(config.virtualOrigin, "/playlist", {
       origin: absoluteOrigin,
@@ -1301,17 +1301,48 @@ GSS.M3U8 = (function createM3U8Tools() {
     return serialize(tag, attributes);
   }
 
+  function inspectTrackTypes(lines) {
+    var summary = { subtitles: 0, closedCaptions: 0, subtitleUris: 0 };
+    lines.forEach(function (line) {
+      if (line.indexOf("#EXT-X-MEDIA:") !== 0) return;
+      var attributes = parseAttributes(line);
+      var type = String(get(attributes, "TYPE") || "").toUpperCase();
+      if (type === "SUBTITLES") { summary.subtitles += 1; if (get(attributes, "URI")) summary.subtitleUris += 1; }
+      if (type === "CLOSED-CAPTIONS") summary.closedCaptions += 1;
+    });
+    return summary;
+  }
+
+  function isMediaPlaylist(body) {
+    if (!body || body.indexOf("#EXTM3U") < 0) return false;
+    var hasSegments = /#EXTINF:|#EXT-X-MEDIA-SEQUENCE:|#EXT-X-PART:/i.test(body);
+    var hasVariants = /#EXT-X-STREAM-INF:|#EXT-X-I-FRAME-STREAM-INF:/i.test(body);
+    var hasRenditions = /#EXT-X-MEDIA:/i.test(body);
+    return hasSegments && !hasVariants && !hasRenditions;
+  }
+
   function injectTracks(body, requestUrl, config, logger, platform) {
     if (!config.enabled || !body || body.indexOf("#EXTM3U") < 0) return body;
     if (body.indexOf("gss.local/playlist") >= 0) return body;
+    if (isMediaPlaylist(body)) {
+      logger.debug("media playlist bypassed", { platform: platform ? platform.id : "unknown" });
+      return body;
+    }
     var lines = body.replace(/\r\n/g, "\n").split("\n");
     var selected = chooseSourceTrack(lines, config);
     if (!selected) {
+      var trackTypes = inspectTrackTypes(lines);
+      var reason = trackTypes.closedCaptions > 0 && trackTypes.subtitleUris === 0
+        ? "in-band closed captions only"
+        : (trackTypes.subtitles > 0 ? "no matching text subtitle track" : "no subtitle rendition declared");
       logger.info("master manifest inspected", {
         platform: platform ? platform.id : "unknown",
         injected: 0,
         source: config.source,
-        reason: "no matching subtitle track"
+        subtitleTracks: trackTypes.subtitles,
+        subtitleUris: trackTypes.subtitleUris,
+        closedCaptionTracks: trackTypes.closedCaptions,
+        reason: reason
       });
       return body;
     }
@@ -1361,6 +1392,8 @@ GSS.M3U8 = (function createM3U8Tools() {
   return {
     parseAttributes: parseAttributes,
     chooseSourceTrack: chooseSourceTrack,
+    inspectTrackTypes: inspectTrackTypes,
+    isMediaPlaylist: isMediaPlaylist,
     injectTracks: injectTracks,
     decorateSubtitlePlaylist: decorateSubtitlePlaylist
   };
