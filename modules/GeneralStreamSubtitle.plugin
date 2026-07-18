@@ -1,0 +1,11 @@
+#!name=General Stream Subtitle
+#!desc=为 Max 注入 Translate-zh 双语字幕轨（v0.2.0）
+#!author=dxy0218 & contributors
+#!homepage=https://github.com/dxy0218/general-stream-subtitle
+
+[Script]
+http-response ^https?:\/\/(?:[^\/]+\.)?(?:max\.com|h264\.io|hbomaxcdn\.com|api\.hbo\.com)\/.*\.m3u8(?:\?.*)?$ script-path=https://raw.githubusercontent.com/dxy0218/general-stream-subtitle/main/dist/manifest.js, timeout=15, requires-body=true, argument=source=en&target=zh-CN&trackName=Translate-zh&injectTranslated=false&bilingualOrder=translation-first&cacheEnabled=true&debug=true, tag=GSS Manifest, enable=true
+http-request ^https?:\/\/(?:gss\.local|127\.0\.0\.1(?::6170)?|localhost(?::6170)?)\/.* script-path=https://raw.githubusercontent.com/dxy0218/general-stream-subtitle/main/dist/gateway.js, timeout=60, argument=source=en&target=zh-CN&trackName=Translate-zh&injectTranslated=false&bilingualOrder=translation-first&cacheEnabled=true&debug=true, tag=GSS Gateway, enable=true
+
+[MITM]
+hostname = *.max.com, *.h264.io, *.hbomaxcdn.com, *.api.hbo.com, gss.local

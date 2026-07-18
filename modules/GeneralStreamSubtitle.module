@@ -1,0 +1,13 @@
+#!name=General Stream Subtitle
+#!desc=为 Max 注入 Translate-zh 双语字幕轨（v0.2.0）
+#!author=dxy0218 & contributors
+#!homepage=https://github.com/dxy0218/general-stream-subtitle
+#!arguments=TARGET:zh-CN, TRACK_NAME:Translate-zh, PURE_TRACK:false, ORDER:translation-first, CACHE:true, DEBUG:true
+#!arguments-desc=TARGET：目标语言\n\nTRACK_NAME：字幕菜单名称\n\nPURE_TRACK：是否额外加入纯翻译字幕\n\nORDER：translation-first 或 original-first\n\nCACHE：翻译缓存\n\nDEBUG：调试日志
+
+[Script]
+GSS Manifest = type=http-response, pattern=^https?:\/\/(?:[^\/]+\.)?(?:max\.com|h264\.io|hbomaxcdn\.com|api\.hbo\.com)\/.*\.m3u8(?:\?.*)?$, requires-body=1, max-size=2097152, timeout=15, script-path=https://raw.githubusercontent.com/dxy0218/general-stream-subtitle/main/dist/manifest.js, argument=source=en&target={{{TARGET}}}&trackName={{{TRACK_NAME}}}&injectTranslated={{{PURE_TRACK}}}&bilingualOrder={{{ORDER}}}&cacheEnabled={{{CACHE}}}&debug={{{DEBUG}}}
+GSS Gateway = type=http-request, pattern=^https?:\/\/(?:gss\.local|127\.0\.0\.1(?::6170)?|localhost(?::6170)?)\/.*, timeout=60, script-path=https://raw.githubusercontent.com/dxy0218/general-stream-subtitle/main/dist/gateway.js, argument=source=en&target={{{TARGET}}}&trackName={{{TRACK_NAME}}}&injectTranslated={{{PURE_TRACK}}}&bilingualOrder={{{ORDER}}}&cacheEnabled={{{CACHE}}}&debug={{{DEBUG}}}
+
+[MITM]
+hostname = %APPEND% *.max.com, *.h264.io, *.hbomaxcdn.com, *.api.hbo.com, gss.local
