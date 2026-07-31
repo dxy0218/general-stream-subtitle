@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.6.4
+
+- Move the default synthetic Gateway from the mDNS-reserved `.local` namespace to `https://example.com` so iOS sends requests through Shadowrocket.
+- Keep `gss.local` and loopback Gateway hosts as legacy compatibility aliases.
+- Add the new HTTPS Gateway host to generated MITM lists and duplicate-injection guards.
+
 ## 0.6.3
 
 - Split the virtual Gateway into bodyless GET and body-reading settings-save request rules.

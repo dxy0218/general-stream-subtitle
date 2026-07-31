@@ -40,7 +40,7 @@ test("Max playback JSON injects a virtual Translate-zh text track", () => {
   assert.equal(injected.language, "zh-CN");
   assert.equal(injected.default, false);
   assert.equal(injected.selected, false);
-  assert.match(injected.url, /https:\/\/gss\.local\/subtitle\?/);
+  assert.match(injected.url, /https:\/\/example\.com\/subtitle\?/);
   assert.doesNotMatch(JSON.stringify([...store.entries()]), /private/);
   assert.equal(result.headers["Content-Length"], undefined);
   assert.equal(result.headers.ETag, undefined);
@@ -58,7 +58,7 @@ test("Discovery+ playback JSON injects a virtual text track on current CDN hosts
   });
   const parsed = JSON.parse(result.body);
   assert.equal(parsed.playback.textTracks.length, 2);
-  assert.match(parsed.playback.textTracks[1].url, /gss\.local\/subtitle/);
+  assert.match(parsed.playback.textTracks[1].url, /example\.com\/subtitle/);
   assert.match(decodeURIComponent(parsed.playback.textTracks[1].url), /platform=discovery/);
 });
 
@@ -93,7 +93,7 @@ test("Discovery hls-only mode injects HLS but bypasses playback JSON", () => {
     $response: { body: json, headers: { "Content-Type": "application/json" } },
     $done(p) { jsonResult = p; }
   });
-  assert.match(hlsResult.body, /gss\.local\/playlist/);
+  assert.match(hlsResult.body, /example\.com\/playlist/);
   assert.deepEqual(Object.keys(jsonResult), []);
 });
 
@@ -135,7 +135,7 @@ test("Shadowrocket Hy-MT2 preset keeps private endpoint and applies low-memory r
   }));
   let result;
   run("dist/gateway.js", {
-    $request: { url: "http://gss.local/health", method: "GET", headers: {} },
+    $request: { url: "https://example.com/health", method: "GET", headers: {} },
     $argument: "presetMode=true&safePlayback=true&hyMt2Preset=true&platformMax=true&platformYoutube=false",
     $persistentStore: persistent,
     $done(p) { result = p; }
@@ -293,9 +293,12 @@ test("Shadowrocket Gateway GET routes do not require a request body", () => {
   assert.match(saveLine, /requires-body=1/);
   assert.equal(getPattern.test("http://gss.local/"), true);
   assert.equal(getPattern.test("http://gss.local/health"), true);
+  assert.equal(getPattern.test("https://example.com/"), true);
+  assert.equal(getPattern.test("https://example.com/health"), true);
   assert.equal(getPattern.test("http://gss.local/subtitle?origin=https%3A%2F%2Fexample.com%2Fa.vtt"), true);
   assert.equal(getPattern.test("http://gss.local/save"), false);
   assert.equal(savePattern.test("http://gss.local/save"), true);
+  assert.equal(savePattern.test("https://example.com/save"), true);
   assert.equal(savePattern.test("http://gss.local/health"), false);
 });
 

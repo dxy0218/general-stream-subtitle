@@ -1,4 +1,4 @@
-// General Stream Subtitle 0.6.3 - gateway
+// General Stream Subtitle 0.6.4 - gateway
 // MIT License - generated file; edit src/ instead.
 (function () {
 "use strict";
@@ -230,7 +230,7 @@ GSS.Language = (function createLanguageTools() {
   };
 })();
 
-GSS.VERSION = "0.6.3";
+GSS.VERSION = "0.6.4";
 GSS.SETTINGS_KEY = "GSS_SETTINGS_V4";
 GSS.PROVIDER_SECRETS_KEY = "GSS_PROVIDER_SECRETS_V1";
 GSS.ADMIN_TOKEN_KEY = "GSS_ADMIN_TOKEN_V1";
@@ -279,7 +279,7 @@ GSS.DEFAULTS = {
   batchChars: 1600,
   batchItems: 12,
   translationConcurrency: 2,
-  virtualOrigin: "https://gss.local"
+  virtualOrigin: "https://example.com"
 };
 
 GSS.parseArguments = function parseArguments(raw) {
@@ -546,7 +546,7 @@ GSS.Url = {
   },
 
   virtual: function virtual(base, route, params) {
-    return GSS.Url.appendParams(String(base || "https://gss.local").replace(/\/$/, "") + route, params);
+    return GSS.Url.appendParams(String(base || "https://example.com").replace(/\/$/, "") + route, params);
   },
 
   extension: function extension(uri) {
@@ -1541,7 +1541,7 @@ GSS.M3U8 = (function createM3U8Tools() {
 
   function injectTracks(body, requestUrl, config, logger, platform) {
     if (!config.enabled || !body || body.indexOf("#EXTM3U") < 0) return body;
-    if (body.indexOf("gss.local/playlist") >= 0) return body;
+    if (/(?:gss\.local|example\.com)\/playlist/.test(body)) return body;
     if (isMediaPlaylist(body)) {
       logger.debug("media playlist bypassed", { platform: platform ? platform.id : "unknown" });
       return body;
@@ -1732,7 +1732,7 @@ GSS.Admin = (function createAdmin() {
       + '<div class="grid"><div><label>自定义 Endpoint</label><input name="providerEndpoint" value="' + escapeHtml(config.providerEndpoint) + '" placeholder="可留空使用默认端点"></div><div><label>模型</label><input name="providerModel" value="' + escapeHtml(config.providerModel) + '" placeholder="gpt-5-mini / deepseek-chat / gemini-2.5-flash"></div></div>'
       + '<div class="grid"><div><label>Azure Region</label><input name="providerRegion" value="' + escapeHtml(config.providerRegion) + '"></div><div><label>Google Project / Location</label><input name="providerProject" value="' + escapeHtml(config.providerProject) + '" placeholder="预留"><input name="providerLocation" value="' + escapeHtml(config.providerLocation) + '" placeholder="global"></div></div>'
       + '<label>LLM 翻译指令</label><textarea name="providerPrompt" rows="4">' + escapeHtml(config.providerPrompt) + '</textarea>'
-      + '<h2>YouTube / YouTube TV</h2><label>字幕接管策略</label><select name="youtubeStrategy"><option value="direct"' + selected(config.youtubeStrategy, "direct") + '>直接拦截 timedtext（推荐）</option><option value="virtual"' + selected(config.youtubeStrategy, "virtual") + '>gss.local 虚拟字幕网关</option></select>'
+      + '<h2>YouTube / YouTube TV</h2><label>字幕接管策略</label><select name="youtubeStrategy"><option value="direct"' + selected(config.youtubeStrategy, "direct") + '>直接拦截 timedtext（推荐）</option><option value="virtual"' + selected(config.youtubeStrategy, "virtual") + '>虚拟字幕网关</option></select>'
       + '<label class="check"><input type="checkbox" name="youtubeUseAsr" value="true"' + checked(config.youtubeUseAsr) + '>使用 YouTube 自动生成字幕（ASR）</label>'
       + '<label class="check"><input type="checkbox" name="youtubeLive" value="true"' + checked(config.youtubeLive) + '>处理 YouTube / YouTube TV 直播文本字幕</label>'
       + '<label class="check"><input type="checkbox" name="youtubePreferManual" value="true"' + checked(config.youtubePreferManual) + '>官方人工字幕优先于 ASR</label><p class="muted">没有 captionTracks 的视频无法在纯模块内生成字幕；嵌入视频流但未转成 timedtext 的 CEA-608/708 也会安全放行。</p>'
@@ -1870,9 +1870,10 @@ GSS.Admin = (function createAdmin() {
   }
 
   try {
-    var isAdminHost = host === "gss.local" || host === "127.0.0.1" || host === "localhost";
+    var isGatewayHost = host === "example.com" || host === "gss.local";
+    var isAdminHost = isGatewayHost || host === "127.0.0.1" || host === "localhost";
     if (isAdminHost && GSS.Admin.handle(requestUrl, config, logger)) return;
-    if (host !== "gss.local") { GSS.Runtime.passThrough(); return; }
+    if (!isGatewayHost) { GSS.Runtime.passThrough(); return; }
 
     var query = GSS.Url.queryObject(requestUrl);
     var origin = query.origin;

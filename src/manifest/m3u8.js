@@ -128,7 +128,7 @@ GSS.M3U8 = (function createM3U8Tools() {
 
   function injectTracks(body, requestUrl, config, logger, platform) {
     if (!config.enabled || !body || body.indexOf("#EXTM3U") < 0) return body;
-    if (body.indexOf("gss.local/playlist") >= 0) return body;
+    if (/(?:gss\.local|example\.com)\/playlist/.test(body)) return body;
     if (isMediaPlaylist(body)) {
       logger.debug("media playlist bypassed", { platform: platform ? platform.id : "unknown" });
       return body;

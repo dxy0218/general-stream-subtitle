@@ -54,7 +54,7 @@ GSS.MPD = (function createMpdTools() {
   }
 
   function injectTrack(body, requestUrl, config, logger, platform) {
-    if (!config.enabled || !/<MPD\b/i.test(String(body || "")) || String(body).indexOf("gss.local/subtitle") >= 0) return body;
+    if (!config.enabled || !/<MPD\b/i.test(String(body || "")) || /(?:gss\.local|example\.com)\/subtitle/.test(String(body))) return body;
     var regex = /<AdaptationSet\b[^>]*>[\s\S]*?<\/AdaptationSet>/gi, match, best = null;
     while ((match = regex.exec(body))) {
       var startTag = (match[0].match(/^<AdaptationSet\b[^>]*>/i) || [""])[0];

@@ -35,7 +35,7 @@ test("built DASH manifest injects a direct text adaptation track", () => {
   });
   assert.match(result.body,/gss-[0-9a-f]+/);
   assert.match(result.body,/Translate-zh/);
-  assert.match(result.body,/gss\.local\/subtitle/);
+  assert.match(result.body,/example\.com\/subtitle/);
 });
 
 test("gateway translates WebVTT through Google free provider", () => {

@@ -1,4 +1,4 @@
-GSS.VERSION = "0.6.3";
+GSS.VERSION = "0.6.4";
 GSS.SETTINGS_KEY = "GSS_SETTINGS_V4";
 GSS.PROVIDER_SECRETS_KEY = "GSS_PROVIDER_SECRETS_V1";
 GSS.ADMIN_TOKEN_KEY = "GSS_ADMIN_TOKEN_V1";
@@ -47,7 +47,7 @@ GSS.DEFAULTS = {
   batchChars: 1600,
   batchItems: 12,
   translationConcurrency: 2,
-  virtualOrigin: "https://gss.local"
+  virtualOrigin: "https://example.com"
 };
 
 GSS.parseArguments = function parseArguments(raw) {

@@ -39,8 +39,8 @@ const paramountPlaybackPattern = String.raw`^https?:\/\/(?:[^\/]+\.)*(?:pplus\.p
 // Only media delivery hosts and explicit manifest files are inspected. App,
 // account, playback-session, GraphQL and DRM endpoints stay outside the rule.
 const warnerMediaPattern = String.raw`^https?:\/\/(?:(?:[^\/]+\.)*(?:prod\.media\.max\.com|prd\.media\.max\.com|prod\.media\.h264\.io|prd\.media\.h264\.io|hbomaxcdn\.com)|manifests(?:\.v2)?\.api\.hbo\.com|[^\/.]*discovery[^\/.]*\.uplynk\.com|(?:dplus|discovery)[^\/.]*\.(?:h264\.io|akamaized\.net))\/.*\.(?:m3u8|mpd)(?:\?.*)?$`;
-const gatewayGetPattern = String.raw`^https?:\/\/(?:gss\.local|127\.0\.0\.1(?::6170)?|localhost(?::6170)?)\/(?!save(?:[\/?#]|$)).*`;
-const gatewaySavePattern = String.raw`^https?:\/\/(?:gss\.local|127\.0\.0\.1(?::6170)?|localhost(?::6170)?)\/save(?:\?.*)?$`;
+const gatewayGetPattern = String.raw`^https?:\/\/(?:example\.com|gss\.local|127\.0\.0\.1(?::6170)?|localhost(?::6170)?)\/(?!save(?:[\/?#]|$)).*`;
+const gatewaySavePattern = String.raw`^https?:\/\/(?:example\.com|gss\.local|127\.0\.0\.1(?::6170)?|localhost(?::6170)?)\/save(?:\?.*)?$`;
 const youtubePlayerPattern = String.raw`^https?:\/\/(?:www\.youtube\.com|m\.youtube\.com|music\.youtube\.com|tv\.youtube\.com|youtubei\.googleapis\.com)\/youtubei\/v1\/player(?:\?.*)?$`;
 const youtubeCaptionPattern = String.raw`^https?:\/\/(?:www\.youtube\.com|m\.youtube\.com|music\.youtube\.com|tv\.youtube\.com)\/api\/timedtext\?.*(?:gss_mode|gss_v)=.*`;
 const mitmHosts = [
@@ -58,7 +58,7 @@ const mitmHosts = [
   "*.fubo.tv", "hls.ted.com",
   "*.bbci.co.uk", "vod-*-live.akamaized.net", "*.viki.io", "*.viki.com", "*.tubi.video", "*.tubitv.com", "stitcher-ipv4.pluto.tv", "service-stitcher.clusters.pluto.tv", "stitcher.pluto.tv", "*.prd.pluto.tv",
   "*.crunchyroll.com", "*.vrv.co", "*.dazn.com", "*.dazn-api.com", "*.plex.tv",
-  "*.youtube.com", "youtubei.googleapis.com", "gss.local"
+  "*.youtube.com", "youtubei.googleapis.com", "example.com", "gss.local"
 ].join(", ");
 const shadowMitmHosts = [
   "*.prod.media.max.com", "*.prd.media.max.com", "*.prod.media.h264.io", "*.prd.media.h264.io", "*.hbomaxcdn.com", "manifests.api.hbo.com", "manifests.v2.api.hbo.com",
@@ -67,7 +67,7 @@ const shadowMitmHosts = [
   "*.hls.pv-cdn.net", "*.hls.row.aiv-cdn.net", "*avodhlss3ww-a.akamaihd.net",
   "d1v5ir2lpwr8os.cloudfront.net", "d22qjgkvxw22r6.cloudfront.net", "d25xi40x97liuc.cloudfront.net", "d27xxe7juh1us6.cloudfront.net", "dmqdd6hw24ucf.cloudfront.net",
   "vodmanifest.hulustream.com", "manifest-dp.hulustream.com", "livemanifest-f.hulustream.com", "live-sc.hulustream.com",
-  "*.youtube.com", "youtubei.googleapis.com", "gss.local"
+  "*.youtube.com", "youtubei.googleapis.com", "example.com", "gss.local"
 ].join(", ");
 const forceHttpHosts = [
   "*.hls.pv-cdn.net", "*.hls.row.aiv-cdn.net", "*avodhlss3ww-a.akamaihd.net", "cf-timedtext.aux.pv-cdn.net",
@@ -90,7 +90,7 @@ const shadowSwitches = [
   { key: "YOUTUBE", value: true, description: "YouTube / YouTube TV 中文字幕" },
   { key: "YT_ASR", value: true, description: "允许 YouTube 自动生成字幕" },
   { key: "YT_LIVE", value: true, description: "处理 YouTube 直播文本字幕" },
-  { key: "HY_MT2", value: false, description: "使用私有 Hy-MT2 翻译服务；先在 gss.local 保存 Endpoint 和 API Key" },
+  { key: "HY_MT2", value: false, description: "使用私有 Hy-MT2 翻译服务；先在管理页保存 Endpoint 和 API Key" },
   { key: "PURE_TRACK", value: false, description: "额外显示纯翻译字幕轨" },
   { key: "CACHE", value: true, description: "启用翻译缓存" },
   { key: "LOGS", value: true, description: "保存脱敏运行日志，便于排查播放和字幕错误" },

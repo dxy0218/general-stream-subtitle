@@ -1,4 +1,4 @@
-// General Stream Subtitle 0.6.3 - manifest
+// General Stream Subtitle 0.6.4 - manifest
 // MIT License - generated file; edit src/ instead.
 (function () {
 "use strict";
@@ -230,7 +230,7 @@ GSS.Language = (function createLanguageTools() {
   };
 })();
 
-GSS.VERSION = "0.6.3";
+GSS.VERSION = "0.6.4";
 GSS.SETTINGS_KEY = "GSS_SETTINGS_V4";
 GSS.PROVIDER_SECRETS_KEY = "GSS_PROVIDER_SECRETS_V1";
 GSS.ADMIN_TOKEN_KEY = "GSS_ADMIN_TOKEN_V1";
@@ -279,7 +279,7 @@ GSS.DEFAULTS = {
   batchChars: 1600,
   batchItems: 12,
   translationConcurrency: 2,
-  virtualOrigin: "https://gss.local"
+  virtualOrigin: "https://example.com"
 };
 
 GSS.parseArguments = function parseArguments(raw) {
@@ -546,7 +546,7 @@ GSS.Url = {
   },
 
   virtual: function virtual(base, route, params) {
-    return GSS.Url.appendParams(String(base || "https://gss.local").replace(/\/$/, "") + route, params);
+    return GSS.Url.appendParams(String(base || "https://example.com").replace(/\/$/, "") + route, params);
   },
 
   extension: function extension(uri) {
@@ -1352,7 +1352,7 @@ GSS.M3U8 = (function createM3U8Tools() {
 
   function injectTracks(body, requestUrl, config, logger, platform) {
     if (!config.enabled || !body || body.indexOf("#EXTM3U") < 0) return body;
-    if (body.indexOf("gss.local/playlist") >= 0) return body;
+    if (/(?:gss\.local|example\.com)\/playlist/.test(body)) return body;
     if (isMediaPlaylist(body)) {
       logger.debug("media playlist bypassed", { platform: platform ? platform.id : "unknown" });
       return body;
@@ -1484,7 +1484,7 @@ GSS.MPD = (function createMpdTools() {
   }
 
   function injectTrack(body, requestUrl, config, logger, platform) {
-    if (!config.enabled || !/<MPD\b/i.test(String(body || "")) || String(body).indexOf("gss.local/subtitle") >= 0) return body;
+    if (!config.enabled || !/<MPD\b/i.test(String(body || "")) || /(?:gss\.local|example\.com)\/subtitle/.test(String(body))) return body;
     var regex = /<AdaptationSet\b[^>]*>[\s\S]*?<\/AdaptationSet>/gi, match, best = null;
     while ((match = regex.exec(body))) {
       var startTag = (match[0].match(/^<AdaptationSet\b[^>]*>/i) || [""])[0];

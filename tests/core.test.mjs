@@ -19,7 +19,7 @@ test("injects a visible Translate-zh bilingual track", () => {
   const platform = GSS.Platforms.detect("https://cf.prod.media.max.com/title/hls.m3u8?sig=1");
   const output = GSS.M3U8.injectTracks(body,"https://cf.prod.media.max.com/title/hls.m3u8?sig=1",GSS.DEFAULTS,{info(){}},platform);
   assert.match(output,/NAME="Translate-zh"/);
-  assert.match(output,/https:\/\/gss\.local\/playlist\?origin=/);
+  assert.match(output,/https:\/\/example\.com\/playlist\?origin=/);
   assert.doesNotMatch(output,/Translate-zh-only/);
   assert.match(decodeURIComponent(output),/subs\/en\/playlist\.m3u8\?token=abc/);
   assert.match(decodeURIComponent(output),/source=en/);
@@ -88,7 +88,7 @@ test("virtualizes every subtitle segment without touching signed origin URLs", (
   const { GSS } = load(core);
   const body = fs.readFileSync(path.join(root,"tests/fixtures/media.m3u8"),"utf8");
   const output = GSS.M3U8.decorateSubtitlePlaylist(body,"https://cdn.max.com/subs/en/playlist.m3u8?token=playlist","bilingual","en","zh-CN",GSS.DEFAULTS,{info(){}},"max");
-  assert.equal((output.match(/https:\/\/gss\.local\/subtitle/g)||[]).length,2);
+  assert.equal((output.match(/https:\/\/example\.com\/subtitle/g)||[]).length,2);
   assert.match(decodeURIComponent(output),/segment-001\.vtt\?token=abc/);
   assert.match(decodeURIComponent(output),/\/subs\/segments\/segment-002\.vtt\?token=def/);
   assert.match(decodeURIComponent(output),/platform=max/);

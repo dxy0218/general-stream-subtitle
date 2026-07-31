@@ -4,7 +4,7 @@
 
 项目通过 HTTPS MITM 读取播放器清单、播放器响应或文本字幕，在原有字幕菜单中加入一个可见的 **`Translate-zh`** 轨道。只有当用户选择该轨道后，模块才获取原字幕、调用翻译 Provider，并返回双语或纯翻译字幕。
 
-> 当前版本：**v0.6.3**
+> 当前版本：**v0.6.4**
 > 支持系统：iOS、iPadOS、macOS、tvOS（具体能力取决于代理客户端与流媒体 App）  
 > 开源协议：MIT
 
@@ -35,7 +35,7 @@
 - 支持 HLS、部分 DASH，以及多种文本字幕格式。
 - 支持 YouTube 普通视频、Shorts、YouTube Live 和 YouTube TV 的文本字幕轨。
 - 支持多种翻译 Provider、备用 Provider 链和自定义 API。
-- 提供 `gss.local` 本地管理页面，设置会保存在代理软件的持久化存储中。
+- 提供由脚本合成的本地管理页面，设置会保存在代理软件的持久化存储中。
 - 提供可复制、可清空的脱敏运行日志，覆盖清单、字幕网关、翻译和安全放行阶段。
 - 不修改视频、音频、DRM、账号鉴权或播放授权。
 
@@ -48,7 +48,7 @@
   └─ manifest.js 识别平台和字幕轨
        └─ 选择最合适的源字幕
             └─ 注入 Translate-zh
-                 └─ URI 指向 gss.local 虚拟字幕网关
+                 └─ URI 指向脚本合成的虚拟字幕网关
                       └─ gateway.js 获取原字幕
                            └─ 解析字幕 → 翻译 → 返回双语字幕
 ```
@@ -61,7 +61,7 @@ youtubei/v1/player
        └─ 优先人工字幕，可回退到 YouTube ASR
             └─ 注入 Translate-zh
                  └─ direct：直接拦截 /api/timedtext
-                 └─ virtual：通过 gss.local/youtube 获取并翻译
+                 └─ virtual：通过虚拟字幕网关获取并翻译
 ```
 
 模块只能处理播放器已经暴露出来的文本字幕。没有 `captionTracks` 的内容不会凭空生成字幕；Whisper 本地语音识别计划留到后续版本。
@@ -102,7 +102,7 @@ https://raw.githubusercontent.com/dxy0218/general-stream-subtitle/main/modules/G
 2. 在代理软件中生成或安装 HTTPS 解密 CA 证书。
 3. 在系统设置中信任该证书。
 4. 开启 MITM / HTTPS 解密。
-5. 打开 `http://gss.local/`，确认管理页面能够显示。
+5. 打开 `https://example.com/`，确认 GSS 管理页面能够显示。
 6. 保持默认的 `source=auto`、`target=zh-CN` 和 `provider=google-free`，先进行基础测试。
 7. 完全退出目标流媒体 App，然后重新打开。
 8. 播放本身带有字幕的内容。
@@ -255,10 +255,10 @@ DeepL 请求失败、没有配置密钥或返回结构无效时，会依次尝�
 
 ### 方法一：本地管理页面
 
-推荐入口：
+推荐入口（由本地脚本拦截，不会访问 example.com 的网页内容）：
 
 ```text
-http://gss.local/
+https://example.com/
 ```
 
 实验性回环入口：
@@ -281,7 +281,7 @@ Shadowrocket 的 v0.6.0 安全预设属于例外：模块编辑页中的平台�
 
 Shadowrocket 和 Surge 可以直接编辑常用模块参数。Loon 建议通过 `gss.local` 管理页面配置。
 
-Shadowrocket 原生编辑器不会把字符串候选值渲染成下拉菜单，因此模块只暴露布尔开关。默认预设为：自动识别源语言、翻译为简体中文、`Translate-zh`、`google-free`、HLS 播放保护。打开 `HY_MT2` 后改用保存在 `gss.local` 中的私有 OpenAI-compatible Endpoint 和 API Key；未配置或请求失败时自动回退到 `google-free`。
+Shadowrocket 原生编辑器不会把字符串候选值渲染成下拉菜单，因此模块只暴露布尔开关。默认预设为：自动识别源语言、翻译为简体中文、`Translate-zh`、`google-free`、HLS 播放保护。打开 `HY_MT2` 后改用保存在本地管理页中的私有 OpenAI-compatible Endpoint 和 API Key；未配置或请求失败时自动回退到 `google-free`。
 
 | 模块参数 | 默认值 | 说明 |
 |---|---|---|
@@ -294,7 +294,7 @@ Shadowrocket 原生编辑器不会把字符串候选值渲染成下拉菜单，�
 | `YOUTUBE` | `true` | YouTube / YouTube TV 中文字幕 |
 | `YT_ASR` | `true` | 是否允许使用 YouTube 自动生成字幕 |
 | `YT_LIVE` | `true` | 是否处理 YouTube 直播文本字幕 |
-| `HY_MT2` | `false` | 使用私有 Hy-MT2 服务；需先在 `gss.local` 保存 Endpoint 和 API Key |
+| `HY_MT2` | `false` | 使用私有 Hy-MT2 服务；需先在管理页保存 Endpoint 和 API Key |
 | `PURE_TRACK` | `false` | 是否额外显示纯翻译字幕轨 |
 | `CACHE` | `true` | 是否启用翻译缓存 |
 | `LOGS` | `true` | 保存脱敏运行日志，方便排查播放和字幕错误 |
@@ -303,7 +303,7 @@ Shadowrocket 原生编辑器不会把字符串候选值渲染成下拉菜单，�
 #### Shadowrocket 使用私有 Hy-MT2
 
 1. 更新模块后先打开 `HY_MT2`。
-2. 在 Shadowrocket 开启模块和 MITM 后访问 `http://gss.local/`。
+2. 在 Shadowrocket 开启模块和 MITM 后访问 `https://example.com/`。
 3. Provider 会自动切换为 `openai-compatible`，模型固定为 `hy-mt2-1.8b`。
 4. 将私有服务的 Base URL（以 `/v1` 结尾）填入 Endpoint，并粘贴 API Key 后保存。
 5. 保持 `CACHE` 和 `LOGS` 开启，完全退出流媒体 App 后重新播放。
@@ -311,6 +311,8 @@ Shadowrocket 原生编辑器不会把字符串候选值渲染成下拉菜单，�
 Endpoint 与 API Key 只保存在当前代理客户端的 persistentStore 中，不会写入模块文件、公开配置响应或运行日志。低内存 CPU VPS 会自动使用单并发和小批次；未配置密钥、服务超时或返回无效内容时会回退到 `google-free`。
 
 `v0.6.3` 将无请求体的管理页、状态、日志和虚拟字幕 GET 请求，与需要读取表单正文的设置保存请求拆成两条 Gateway 规则，避免部分 Shadowrocket 版本访问 `http://gss.local/` 时持续等待。
+
+`v0.6.4` 改用 `https://example.com/` 作为默认入口。`.local` 在 iOS 中保留给 Bonjour/mDNS，部分网络环境不会把 `gss.local` 请求交给 Shadowrocket；旧入口仅保留用于兼容。
 
 Surge 继续提供 `SOURCE`、`TARGET`、`PROVIDER`、`PLATFORMS`、`DISCOVERY_MODE` 等文本参数；完整自定义配置仍可通过 `gss.local` 管理。
 
@@ -511,7 +513,7 @@ cdn.example.net
 打开：
 
 ```text
-http://gss.local/
+https://example.com/
 ```
 
 能打开说明 Gateway 请求脚本已经工作，但不代表目标平台的播放器响应或字幕请求一定已命中。
@@ -543,16 +545,16 @@ http://gss.local/
 ### 收集运行日志
 
 1. 在 Shadowrocket 模块参数中保持 `LOGS=true`，不需要打开 `DEBUG`。
-2. 打开 `http://gss.local/logs`，先清空旧日志。
+2. 打开 `https://example.com/logs`，先清空旧日志。
 3. 完全退出目标流媒体 App，重新打开并重现一次问题。
-4. 再次打开 `http://gss.local/logs`，查看具体停在哪个平台和处理阶段。
+4. 再次打开 `https://example.com/logs`，查看具体停在哪个平台和处理阶段。
 5. 使用“复制全部日志”或 `/logs.json` 导出脱敏记录后再提交 Issue。
 
 日志只包含模块实际命中的请求。完全绕过 MITM 或根本没有命中脚本规则的请求不会出现在记录里。
 
 ### 常见问题
 
-#### `gss.local` 无法打开
+#### 管理页无法打开
 
 - 检查模块是否启用。
 - 检查 Gateway 脚本规则是否存在。

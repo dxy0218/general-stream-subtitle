@@ -85,7 +85,7 @@ GSS.Url = {
   },
 
   virtual: function virtual(base, route, params) {
-    return GSS.Url.appendParams(String(base || "https://gss.local").replace(/\/$/, "") + route, params);
+    return GSS.Url.appendParams(String(base || "https://example.com").replace(/\/$/, "") + route, params);
   },
 
   extension: function extension(uri) {

@@ -1,4 +1,4 @@
-// General Stream Subtitle 0.6.3 - youtube-caption
+// General Stream Subtitle 0.6.4 - youtube-caption
 // MIT License - generated file; edit src/ instead.
 (function () {
 "use strict";
@@ -230,7 +230,7 @@ GSS.Language = (function createLanguageTools() {
   };
 })();
 
-GSS.VERSION = "0.6.3";
+GSS.VERSION = "0.6.4";
 GSS.SETTINGS_KEY = "GSS_SETTINGS_V4";
 GSS.PROVIDER_SECRETS_KEY = "GSS_PROVIDER_SECRETS_V1";
 GSS.ADMIN_TOKEN_KEY = "GSS_ADMIN_TOKEN_V1";
@@ -279,7 +279,7 @@ GSS.DEFAULTS = {
   batchChars: 1600,
   batchItems: 12,
   translationConcurrency: 2,
-  virtualOrigin: "https://gss.local"
+  virtualOrigin: "https://example.com"
 };
 
 GSS.parseArguments = function parseArguments(raw) {
@@ -546,7 +546,7 @@ GSS.Url = {
   },
 
   virtual: function virtual(base, route, params) {
-    return GSS.Url.appendParams(String(base || "https://gss.local").replace(/\/$/, "") + route, params);
+    return GSS.Url.appendParams(String(base || "https://example.com").replace(/\/$/, "") + route, params);
   },
 
   extension: function extension(uri) {
