@@ -1,4 +1,4 @@
-// General Stream Subtitle 0.6.4 - manifest
+// General Stream Subtitle 0.6.5 - manifest
 // MIT License - generated file; edit src/ instead.
 (function () {
 "use strict";
@@ -43,6 +43,23 @@ GSS.Runtime = (function createRuntime() {
   function doneResponse(status, headers, body) { done({ response: { status: status || 200, headers: cleanHeaders(headers || {}), body: body || "" } }); }
   function passThrough() { done({}); }
 
+  function httpStatusError(status, body) {
+    var suffix = "";
+    try {
+      var parsed = JSON.parse(String(body || "")), detail = parsed && (parsed.error || parsed);
+      if (detail && typeof detail === "object") {
+        var safe = [];
+        if (detail.type) safe.push("type=" + String(detail.type).replace(/[^a-z0-9_.-]/gi, "").slice(0, 80));
+        if (detail.code !== undefined) safe.push("code=" + String(detail.code).replace(/[^a-z0-9_.-]/gi, "").slice(0, 40));
+        ["n_prompt_tokens", "n_ctx"].forEach(function (key) {
+          if (detail[key] !== undefined && /^\d+$/.test(String(detail[key]))) safe.push(key + "=" + detail[key]);
+        });
+        if (safe.length) suffix = " (" + safe.join(", ") + ")";
+      }
+    } catch (_) {}
+    return new Error("HTTP " + status + suffix);
+  }
+
   function httpRequest(input, callback) {
     if (typeof $httpClient === "undefined") { callback(new Error("$httpClient is unavailable")); return; }
     var options = typeof input === "string" ? { url: input } : (input || {});
@@ -57,7 +74,7 @@ GSS.Runtime = (function createRuntime() {
     $httpClient[clientMethod](options, function (error, response, body) {
       if (error) { callback(error); return; }
       var status = response && (response.status || response.statusCode);
-      if (status && Number(status) >= 400) { callback(new Error("HTTP " + status), body || "", response || {}); return; }
+      if (status && Number(status) >= 400) { callback(httpStatusError(status, body), body || "", response || {}); return; }
       callback(null, body || "", response || {});
     });
   }
@@ -230,7 +247,7 @@ GSS.Language = (function createLanguageTools() {
   };
 })();
 
-GSS.VERSION = "0.6.4";
+GSS.VERSION = "0.6.5";
 GSS.SETTINGS_KEY = "GSS_SETTINGS_V4";
 GSS.PROVIDER_SECRETS_KEY = "GSS_PROVIDER_SECRETS_V1";
 GSS.ADMIN_TOKEN_KEY = "GSS_ADMIN_TOKEN_V1";
@@ -395,9 +412,11 @@ GSS.getConfig = function getConfig() {
       // tested Hy-MT2 request profile here.
       config.providerModel = "hy-mt2-1.8b";
       config.providerPrompt = "Translate each subtitle naturally and concisely into Simplified Chinese. Preserve names, tone, punctuation, item count, and item order.";
-      config.translationConcurrency = 1;
-      config.batchItems = 3;
-      config.batchChars = 480;
+      // These values belong to the fast fallback provider. The Hy-MT2 adapter
+      // applies its own 512-token safety guard before sending a request.
+      config.translationConcurrency = 2;
+      config.batchItems = 12;
+      config.batchChars = 1600;
     }
     config.platforms = presetPlatforms.join("|") || "none";
     config.discoveryMode = args.platformDiscovery ? (args.discoveryHlsOnly === false ? "full" : "hls-only") : "off";

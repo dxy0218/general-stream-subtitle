@@ -38,6 +38,23 @@ GSS.Runtime = (function createRuntime() {
   function doneResponse(status, headers, body) { done({ response: { status: status || 200, headers: cleanHeaders(headers || {}), body: body || "" } }); }
   function passThrough() { done({}); }
 
+  function httpStatusError(status, body) {
+    var suffix = "";
+    try {
+      var parsed = JSON.parse(String(body || "")), detail = parsed && (parsed.error || parsed);
+      if (detail && typeof detail === "object") {
+        var safe = [];
+        if (detail.type) safe.push("type=" + String(detail.type).replace(/[^a-z0-9_.-]/gi, "").slice(0, 80));
+        if (detail.code !== undefined) safe.push("code=" + String(detail.code).replace(/[^a-z0-9_.-]/gi, "").slice(0, 40));
+        ["n_prompt_tokens", "n_ctx"].forEach(function (key) {
+          if (detail[key] !== undefined && /^\d+$/.test(String(detail[key]))) safe.push(key + "=" + detail[key]);
+        });
+        if (safe.length) suffix = " (" + safe.join(", ") + ")";
+      }
+    } catch (_) {}
+    return new Error("HTTP " + status + suffix);
+  }
+
   function httpRequest(input, callback) {
     if (typeof $httpClient === "undefined") { callback(new Error("$httpClient is unavailable")); return; }
     var options = typeof input === "string" ? { url: input } : (input || {});
@@ -52,7 +69,7 @@ GSS.Runtime = (function createRuntime() {
     $httpClient[clientMethod](options, function (error, response, body) {
       if (error) { callback(error); return; }
       var status = response && (response.status || response.statusCode);
-      if (status && Number(status) >= 400) { callback(new Error("HTTP " + status), body || "", response || {}); return; }
+      if (status && Number(status) >= 400) { callback(httpStatusError(status, body), body || "", response || {}); return; }
       callback(null, body || "", response || {});
     });
   }

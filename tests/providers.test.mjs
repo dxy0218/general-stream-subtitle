@@ -54,6 +54,30 @@ test("OpenAI-compatible provider parses a strict translations object",()=>{
   assert.equal(JSON.parse(request.body).model,"model-x");
 });
 
+test("Hy-MT2 low-context profile rejects a large batch before the HTTP request",()=>{
+  let requests=0;
+  const {GSS}=load({post(){requests++;}});
+  GSS.saveProviderSecret("openai-compatible","apiKey","key-2");
+  const config={...GSS.DEFAULTS,provider:"openai-compatible",providerEndpoint:"https://api.example.com/v1",providerModel:"hy-mt2-1.8b",fallbackProviders:""};
+  let error;
+  GSS.Providers.translateMany(["one","two","three","four"],"en","zh-CN",config,logger,(e)=>{error=e;});
+  assert.match(String(error),/low-context profile skipped a large subtitle batch/);
+  assert.equal(requests,0);
+});
+
+test("HTTP API diagnostics retain safe context-limit fields without the response message",()=>{
+  const body=JSON.stringify({error:{code:400,message:"request contained private subtitle text",type:"exceed_context_size_error",n_prompt_tokens:2002,n_ctx:512}});
+  const {GSS}=load({post(options,cb){cb(null,{status:400},body);}});
+  GSS.saveProviderSecret("openai-compatible","apiKey","key-2");
+  const config={...GSS.DEFAULTS,provider:"openai-compatible",providerEndpoint:"https://api.example.com/v1",providerModel:"model-x",fallbackProviders:""};
+  let error;
+  GSS.Providers.translateMany(["Hello"],"en","zh-CN",config,logger,(e)=>{error=e;});
+  assert.match(String(error),/type=exceed_context_size_error/);
+  assert.match(String(error),/n_prompt_tokens=2002/);
+  assert.match(String(error),/n_ctx=512/);
+  assert.doesNotMatch(String(error),/private subtitle text/);
+});
+
 test("Google free provider translates independent batches concurrently and preserves order",()=>{
   const pending=[];
   const {GSS}=load({get(options,cb){pending.push({options,cb});}});

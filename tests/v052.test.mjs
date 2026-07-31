@@ -123,7 +123,7 @@ test("Shadowrocket preset overrides stale settings and injects all five requeste
   }
 });
 
-test("Shadowrocket Hy-MT2 preset keeps private endpoint and applies low-memory request limits", () => {
+test("Shadowrocket Hy-MT2 preset keeps the private endpoint and normal fallback throughput", () => {
   const { store, persistent } = storeRuntime();
   store.set("GSS_SETTINGS_V4", JSON.stringify({
     provider: "google-free",
@@ -145,9 +145,9 @@ test("Shadowrocket Hy-MT2 preset keeps private endpoint and applies low-memory r
   assert.equal(config.fallbackProviders, "google-free");
   assert.equal(config.providerEndpoint, "https://private-translator.example:9443/v1");
   assert.equal(config.providerModel, "hy-mt2-1.8b");
-  assert.equal(config.translationConcurrency, 1);
-  assert.equal(config.batchItems, 3);
-  assert.equal(config.batchChars, 480);
+  assert.equal(config.translationConcurrency, 2);
+  assert.equal(config.batchItems, 12);
+  assert.equal(config.batchChars, 1600);
   assert.equal(config.hyMt2Preset, true);
 });
 

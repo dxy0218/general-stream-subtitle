@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.6.5
+
+- Detect subtitle payloads that cannot fit the 512-token self-hosted Hy-MT2 profile and fail over before sending an oversized request.
+- Restore normal Google fallback batching and two-request concurrency instead of inheriting the VPS low-throughput profile.
+- Include only safe structured upstream error fields such as error type and context-token counts in diagnostics.
+
 ## 0.6.4
 
 - Move the default synthetic Gateway from the mDNS-reserved `.local` namespace to `https://example.com` so iOS sends requests through Shadowrocket.

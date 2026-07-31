@@ -4,7 +4,7 @@
 
 项目通过 HTTPS MITM 读取播放器清单、播放器响应或文本字幕，在原有字幕菜单中加入一个可见的 **`Translate-zh`** 轨道。只有当用户选择该轨道后，模块才获取原字幕、调用翻译 Provider，并返回双语或纯翻译字幕。
 
-> 当前版本：**v0.6.4**
+> 当前版本：**v0.6.5**
 > 支持系统：iOS、iPadOS、macOS、tvOS（具体能力取决于代理客户端与流媒体 App）  
 > 开源协议：MIT
 
@@ -308,7 +308,9 @@ Shadowrocket 原生编辑器不会把字符串候选值渲染成下拉菜单，�
 4. 将私有服务的 Base URL（以 `/v1` 结尾）填入 Endpoint，并粘贴 API Key 后保存。
 5. 保持 `CACHE` 和 `LOGS` 开启，完全退出流媒体 App 后重新播放。
 
-Endpoint 与 API Key 只保存在当前代理客户端的 persistentStore 中，不会写入模块文件、公开配置响应或运行日志。低内存 CPU VPS 会自动使用单并发和小批次；未配置密钥、服务超时或返回无效内容时会回退到 `google-free`。
+Endpoint 与 API Key 只保存在当前代理客户端的 persistentStore 中，不会写入模块文件、公开配置响应或运行日志。低内存 CPU VPS 只接收能够安全放入上下文的小字幕段；未配置密钥、输入过大、服务超时或返回无效内容时会回退到 `google-free`。
+
+2GB/单核 VPS 上的 512-token Hy-MT2 服务只处理能够安全放入上下文的小字幕段。完整剧集字幕或大型 WebVTT 会在发请求前直接交给 `google-free`，避免上下文超限 `HTTP 400`；Google 回退保持正常批量和双并发。若要求整集字幕全部由 VPS 实时翻译，需要换用吞吐量更高的专用翻译服务。
 
 `v0.6.3` 将无请求体的管理页、状态、日志和虚拟字幕 GET 请求，与需要读取表单正文的设置保存请求拆成两条 Gateway 规则，避免部分 Shadowrocket 版本访问 `http://gss.local/` 时持续等待。
 

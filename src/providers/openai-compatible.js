@@ -1,6 +1,13 @@
 GSS.Providers.register("openai-compatible", { name: "OpenAI 兼容接口（DeepSeek 等）", kind: "llm", requiresKey: true }, function (config, logger, secrets) {
   function translateMany(texts, source, target, callback) {
     if (!config.providerModel) { callback(new Error("Compatible API model is empty")); return; }
+    if (String(config.providerModel).toLowerCase() === "hy-mt2-1.8b") {
+      var inputChars = JSON.stringify(texts || []).length;
+      if (texts.length > 3 || inputChars > 480) {
+        callback(new Error("Hy-MT2 low-context profile skipped a large subtitle batch (items=" + texts.length + ", chars=" + inputChars + ", limits=3/480)"));
+        return;
+      }
+    }
     var base = (config.providerEndpoint || "https://api.deepseek.com").replace(/\/$/, "");
     var endpoint = /\/chat\/completions$/.test(base) ? base : base + "/chat/completions";
     var body = {

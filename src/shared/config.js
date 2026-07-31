@@ -1,4 +1,4 @@
-GSS.VERSION = "0.6.4";
+GSS.VERSION = "0.6.5";
 GSS.SETTINGS_KEY = "GSS_SETTINGS_V4";
 GSS.PROVIDER_SECRETS_KEY = "GSS_PROVIDER_SECRETS_V1";
 GSS.ADMIN_TOKEN_KEY = "GSS_ADMIN_TOKEN_V1";
@@ -163,9 +163,11 @@ GSS.getConfig = function getConfig() {
       // tested Hy-MT2 request profile here.
       config.providerModel = "hy-mt2-1.8b";
       config.providerPrompt = "Translate each subtitle naturally and concisely into Simplified Chinese. Preserve names, tone, punctuation, item count, and item order.";
-      config.translationConcurrency = 1;
-      config.batchItems = 3;
-      config.batchChars = 480;
+      // These values belong to the fast fallback provider. The Hy-MT2 adapter
+      // applies its own 512-token safety guard before sending a request.
+      config.translationConcurrency = 2;
+      config.batchItems = 12;
+      config.batchChars = 1600;
     }
     config.platforms = presetPlatforms.join("|") || "none";
     config.discoveryMode = args.platformDiscovery ? (args.discoveryHlsOnly === false ? "full" : "hls-only") : "off";
