@@ -62,6 +62,41 @@ test("Discovery+ playback JSON injects a virtual text track on current CDN hosts
   assert.match(decodeURIComponent(parsed.playback.textTracks[1].url), /platform=discovery/);
 });
 
+test("Discovery compatibility mode overrides stored settings and can fully pass through", () => {
+  const body = fs.readFileSync(path.join(root, "tests/fixtures/master.m3u8"), "utf8");
+  const { store, persistent } = storeRuntime(); let result;
+  store.set("GSS_SETTINGS_V4", JSON.stringify({ platforms: "all", discoveryMode: "full" }));
+  run("dist/manifest.js", {
+    $request: { url: "https://content-ause1-ur-discovery1.uplynk.com/asset/master.m3u8", headers: {} },
+    $response: { body, headers: { "Content-Type": "application/vnd.apple.mpegurl" } },
+    $argument: "discoveryMode=off",
+    $persistentStore: persistent,
+    $done(p) { result = p; }
+  });
+  assert.deepEqual(Object.keys(result), []);
+});
+
+test("Discovery hls-only mode injects HLS but bypasses playback JSON", () => {
+  const hls = fs.readFileSync(path.join(root, "tests/fixtures/master.m3u8"), "utf8");
+  const json = fs.readFileSync(path.join(root, "tests/fixtures/max-playback.json"), "utf8");
+  const { persistent } = storeRuntime(); let hlsResult, jsonResult;
+  const globals = { $argument: "discoveryMode=hls-only", $persistentStore: persistent };
+  run("dist/manifest.js", {
+    ...globals,
+    $request: { url: "https://content-ause1-ur-discovery1.uplynk.com/asset/master.m3u8", headers: {} },
+    $response: { body: hls, headers: { "Content-Type": "application/vnd.apple.mpegurl" } },
+    $done(p) { hlsResult = p; }
+  });
+  run("dist/manifest.js", {
+    ...globals,
+    $request: { url: "https://content-ause1-ur-discovery1.uplynk.com/playback/session", headers: {} },
+    $response: { body: json, headers: { "Content-Type": "application/json" } },
+    $done(p) { jsonResult = p; }
+  });
+  assert.match(hlsResult.body, /gss\.local\/playlist/);
+  assert.deepEqual(Object.keys(jsonResult), []);
+});
+
 test("Apple manifest rewrite preserves DRM and video routes while refreshing entity metadata", () => {
   const body = [
     "#EXTM3U",
@@ -123,6 +158,7 @@ test("generated modules isolate Pluto and add Paramount Live rules", () => {
     assert.match(content, /GSS Paramount Live Manifest/);
     assert.match(content, /GSS Paramount Playback/);
     assert.match(content, /GSS Max Discovery Playback/);
+    assert.match(content, /discoveryMode=/);
     assert.match(content, /discomax\\\.com/);
     assert.match(content, /uplynk\\\.com/);
     const hostnameLine = content.split("\n").find((line) => line.startsWith("hostname = "));

@@ -66,9 +66,9 @@ const manifestUrl = `${rawBase}/dist/manifest.js`;
 const gatewayUrl = `${rawBase}/dist/gateway.js`;
 const youtubeUrl = `${rawBase}/dist/youtube.js`;
 const youtubeCaptionUrl = `${rawBase}/dist/youtube-caption.js`;
-const defaultArgs = "source=auto&target=zh-CN&trackName=Translate-zh&provider=google-free&platforms=all&formats=all&genericMode=false&youtubeStrategy=direct&youtubeUseAsr=true&youtubeLive=true&youtubePreferManual=true&injectTranslated=false&bilingualOrder=translation-first&cacheEnabled=true&debug=false";
-const surgeArgs = "source=%SOURCE%&target=%TARGET%&trackName=%TRACK_NAME%&provider=%PROVIDER%&platforms=%PLATFORMS%&formats=%FORMATS%&genericMode=%GENERIC%&youtubeStrategy=%YT_STRATEGY%&youtubeUseAsr=%YT_ASR%&youtubeLive=%YT_LIVE%&youtubePreferManual=%YT_MANUAL%&injectTranslated=%PURE_TRACK%&bilingualOrder=%ORDER%&cacheEnabled=%CACHE%&debug=%DEBUG%";
-const shadowArgs = "source={{{SOURCE}}}&target={{{TARGET}}}&trackName={{{TRACK_NAME}}}&provider={{{PROVIDER}}}&platforms={{{PLATFORMS}}}&formats={{{FORMATS}}}&genericMode={{{GENERIC}}}&youtubeStrategy={{{YT_STRATEGY}}}&youtubeUseAsr={{{YT_ASR}}}&youtubeLive={{{YT_LIVE}}}&youtubePreferManual={{{YT_MANUAL}}}&injectTranslated={{{PURE_TRACK}}}&bilingualOrder={{{ORDER}}}&cacheEnabled={{{CACHE}}}&debug={{{DEBUG}}}";
+const defaultArgs = "source=auto&target=zh-CN&trackName=Translate-zh&provider=google-free&platforms=all&discoveryMode=full&formats=all&genericMode=false&youtubeStrategy=direct&youtubeUseAsr=true&youtubeLive=true&youtubePreferManual=true&injectTranslated=false&bilingualOrder=translation-first&cacheEnabled=true&debug=false";
+const surgeArgs = "source=%SOURCE%&target=%TARGET%&trackName=%TRACK_NAME%&provider=%PROVIDER%&platforms=%PLATFORMS%&discoveryMode=%DISCOVERY_MODE%&formats=%FORMATS%&genericMode=%GENERIC%&youtubeStrategy=%YT_STRATEGY%&youtubeUseAsr=%YT_ASR%&youtubeLive=%YT_LIVE%&youtubePreferManual=%YT_MANUAL%&injectTranslated=%PURE_TRACK%&bilingualOrder=%ORDER%&cacheEnabled=%CACHE%&debug=%DEBUG%";
+const shadowArgs = "source={{{SOURCE}}}&target={{{TARGET}}}&trackName={{{TRACK_NAME}}}&provider={{{PROVIDER}}}&platforms={{{PLATFORMS}}}&discoveryMode={{{DISCOVERY_MODE}}}&formats={{{FORMATS}}}&genericMode={{{GENERIC}}}&youtubeStrategy={{{YT_STRATEGY}}}&youtubeUseAsr={{{YT_ASR}}}&youtubeLive={{{YT_LIVE}}}&youtubePreferManual={{{YT_MANUAL}}}&injectTranslated={{{PURE_TRACK}}}&bilingualOrder={{{ORDER}}}&cacheEnabled={{{CACHE}}}&debug={{{DEBUG}}}";
 
 const surge = `#!name=General Stream Subtitle\n#!desc=多平台 HLS/DASH、多字幕格式、多翻译引擎（v${pkg.version}）\n#!author=dxy0218 & contributors\n#!homepage=${repo}\n#!arguments=SOURCE=auto&TARGET=zh-CN&TRACK_NAME=Translate-zh&PROVIDER=google-free&PLATFORMS=all&FORMATS=all&GENERIC=false&YT_STRATEGY=direct&YT_ASR=true&YT_LIVE=true&YT_MANUAL=true&PURE_TRACK=false&ORDER=translation-first&CACHE=true&DEBUG=false\n\n[General]\nforce-http-engine-hosts = %APPEND% ${forceHttpHosts}\n\n[Script]\nGSS Manifest = type=http-response, pattern=${manifestPattern}, requires-body=1, max-size=4194304, timeout=25, script-path=${manifestUrl}, argument=${surgeArgs}\nGSS Pluto Master = type=http-response, pattern=${plutoMasterPattern}, requires-body=1, max-size=4194304, timeout=20, script-path=${manifestUrl}, argument=${surgeArgs}\nGSS Paramount Live Manifest = type=http-response, pattern=${paramountManifestPattern}, requires-body=1, max-size=4194304, timeout=20, script-path=${manifestUrl}, argument=${surgeArgs}\nGSS Paramount Playback = type=http-response, pattern=${paramountPlaybackPattern}, requires-body=1, max-size=4194304, timeout=25, script-path=${manifestUrl}, argument=${surgeArgs}\nGSS Max Discovery Playback = type=http-response, pattern=${warnerPlaybackPattern}, requires-body=1, max-size=4194304, timeout=25, script-path=${manifestUrl}, argument=${surgeArgs}\nGSS Gateway = type=http-request, pattern=${gatewayPattern}, requires-body=1, timeout=90, script-path=${gatewayUrl}, argument=${surgeArgs}
 GSS YouTube Player = type=http-response, pattern=${youtubePlayerPattern}, requires-body=1, max-size=4194304, timeout=30, script-path=${youtubeUrl}, argument=${surgeArgs}
@@ -80,8 +80,13 @@ const shadowrocket = `#!name=General Stream Subtitle\n#!desc=多平台 HLS/DASH�
 GSS YouTube Player = type=http-response, pattern=${youtubePlayerPattern}, requires-body=1, max-size=4194304, timeout=30, script-path=${youtubeUrl}, argument=${shadowArgs}
 GSS YouTube Caption = type=http-response, pattern=${youtubeCaptionPattern}, requires-body=1, max-size=4194304, timeout=90, script-path=${youtubeCaptionUrl}, argument=${shadowArgs}\n\n[MITM]\nhostname = %APPEND% ${mitmHosts}\n`;
 
+const surgeModule = surge.replace("PLATFORMS=all&FORMATS=all", "PLATFORMS=all&DISCOVERY_MODE=full&FORMATS=all");
+const shadowrocketModule = shadowrocket
+  .replace("PLATFORMS:all, FORMATS:all", "PLATFORMS:all, DISCOVERY_MODE:full, FORMATS:all")
+  .replace("PLATFORMS：平台 ID\\n\\nFORMATS", "PLATFORMS：平台 ID\\n\\nDISCOVERY_MODE：full、hls-only 或 off；不受 gss.local 旧设置覆盖\\n\\nFORMATS");
+
 fs.mkdirSync(path.join(root, "modules"), { recursive: true });
-fs.writeFileSync(path.join(root, "modules", "GeneralStreamSubtitle.sgmodule"), surge);
+fs.writeFileSync(path.join(root, "modules", "GeneralStreamSubtitle.sgmodule"), surgeModule);
 fs.writeFileSync(path.join(root, "modules", "GeneralStreamSubtitle.plugin"), loon);
-fs.writeFileSync(path.join(root, "modules", "GeneralStreamSubtitle.module"), shadowrocket);
+fs.writeFileSync(path.join(root, "modules", "GeneralStreamSubtitle.module"), shadowrocketModule);
 console.log(`Built General Stream Subtitle ${pkg.version}`);

@@ -276,6 +276,8 @@ http://127.0.0.1:6170/gss/
 
 因此，如果修改模块参数后没有生效，请检查管理页面中是否保存过旧设置。
 
+`DISCOVERY_MODE` 是兼容性诊断开关，属于例外：模块参数始终优先于 `gss.local` 中的旧设置，因此可以在 Apple TV 上可靠地切换 Discovery+ 的处理范围。
+
 ### 方法二：模块参数
 
 Shadowrocket 和 Surge 可以直接编辑常用模块参数。Loon 建议通过 `gss.local` 管理页面配置。
@@ -287,6 +289,7 @@ Shadowrocket 和 Surge 可以直接编辑常用模块参数。Loon 建议通过 
 | `TRACK_NAME` | `Translate-zh` | 字幕菜单中显示的名称 |
 | `PROVIDER` | `google-free` | 主翻译 Provider |
 | `PLATFORMS` | `all` | 启用的平台 ID，多个用 `|` 或逗号分隔 |
+| `DISCOVERY_MODE` | `full` | Discovery+：`full` 全部处理、`hls-only` 仅处理 HLS、`off` 原样放行 |
 | `FORMATS` | `all` | 启用的字幕格式 |
 | `GENERIC` | `false` | 是否启用通用 HLS/DASH 检查 |
 | `YT_STRATEGY` | `direct` | YouTube 字幕接管：`direct` 或 `virtual` |
@@ -536,6 +539,7 @@ http://gss.local/
 - 不要给视频 CDN（如 `*.googlevideo.com`）额外开启 MITM。
 - 关闭纯翻译轨，减少字幕菜单和请求数量。
 - Apple TV / Fitness+ 出现异常时，先更新模块并完全退出 App；新版本会为注入轨生成独立 `STABLE-RENDITION-ID`，并移除改写后失效的 ETag/Digest。
+- Apple TV 上的 Discovery+ 可先设 `DISCOVERY_MODE=off` 验证纯 MITM；若能播放，再用 `hls-only` 隔离播放 JSON 注入。
 
 #### 修改模块参数后没有变化
 

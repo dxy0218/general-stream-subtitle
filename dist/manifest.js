@@ -1,4 +1,4 @@
-// General Stream Subtitle 0.5.5 - manifest
+// General Stream Subtitle 0.5.6 - manifest
 // MIT License - generated file; edit src/ instead.
 (function () {
 "use strict";
@@ -230,7 +230,7 @@ GSS.Language = (function createLanguageTools() {
   };
 })();
 
-GSS.VERSION = "0.5.5";
+GSS.VERSION = "0.5.6";
 GSS.SETTINGS_KEY = "GSS_SETTINGS_V4";
 GSS.PROVIDER_SECRETS_KEY = "GSS_PROVIDER_SECRETS_V1";
 GSS.ADMIN_TOKEN_KEY = "GSS_ADMIN_TOKEN_V1";
@@ -253,6 +253,7 @@ GSS.DEFAULTS = {
   translatedTrackName: "Translate-zh-only",
   bilingualOrder: "translation-first",
   platforms: "all",
+  discoveryMode: "full",
   formats: "all",
   genericMode: false,
   customDomains: "",
@@ -293,7 +294,7 @@ GSS.allowedSettings = {
   enabled: "boolean", provider: "string", fallbackProviders: "string", providerEndpoint: "string",
   providerModel: "string", providerRegion: "string", providerProject: "string", providerLocation: "string",
   providerPrompt: "string", source: "string", sourcePriority: "string", target: "string", trackName: "string",
-  injectTranslated: "boolean", translatedTrackName: "string", bilingualOrder: "string", platforms: "string",
+  injectTranslated: "boolean", translatedTrackName: "string", bilingualOrder: "string", platforms: "string", discoveryMode: "string",
   formats: "string", genericMode: "boolean", customDomains: "string", youtubeStrategy: "string",
   youtubeUseAsr: "boolean", youtubeLive: "boolean", youtubePreferManual: "boolean", debug: "boolean", cacheEnabled: "boolean",
   cacheTTL: "number", cacheLimit: "number", batchChars: "number", batchItems: "number", translationConcurrency: "number"
@@ -309,6 +310,10 @@ GSS.normalizeSettings = function normalizeSettings(input) {
     else if (type === "string") output[key] = String(input[key]).slice(0, key === "providerPrompt" ? 1200 : 600);
   });
   if (output.bilingualOrder && output.bilingualOrder !== "original-first") output.bilingualOrder = "translation-first";
+  if (output.discoveryMode) {
+    output.discoveryMode = String(output.discoveryMode).toLowerCase();
+    if (output.discoveryMode !== "off" && output.discoveryMode !== "hls-only") output.discoveryMode = "full";
+  }
   if (output.youtubeStrategy && output.youtubeStrategy !== "virtual") output.youtubeStrategy = "direct";
   if (output.source) output.source = GSS.Language ? GSS.Language.normalize(output.source) : String(output.source).toLowerCase();
   if (output.translationConcurrency !== undefined) output.translationConcurrency = Math.max(1, Math.min(4, Math.floor(output.translationConcurrency)));
@@ -349,14 +354,19 @@ GSS.getConfig = function getConfig() {
   var config = {};
   Object.keys(GSS.DEFAULTS).forEach(function (key) { config[key] = GSS.DEFAULTS[key]; });
   var args = GSS.normalizeSettings(GSS.parseArguments(typeof $argument !== "undefined" ? $argument : ""));
+  var forcedDiscoveryMode = args.discoveryMode;
   Object.keys(args).forEach(function (key) { config[key] = args[key]; });
   var stored = GSS.readStoredSettings();
   Object.keys(stored).forEach(function (key) { config[key] = stored[key]; });
+  // This compatibility switch must remain controllable from module arguments
+  // even when older gss.local settings override normal module parameters.
+  if (forcedDiscoveryMode) config.discoveryMode = forcedDiscoveryMode;
   config.source = config.source || "auto";
   config.provider = config.provider || "google-free";
   config.trackName = config.trackName || "Translate-zh";
   config.translatedTrackName = config.translatedTrackName || "Translate-zh-only";
   config.platforms = config.platforms || "all";
+  config.discoveryMode = config.discoveryMode || "full";
   config.formats = config.formats || "all";
   return config;
 };
@@ -1391,6 +1401,8 @@ GSS.MPD = (function createMpdTools() {
     var requestUrl = GSS.Runtime.request.url || "";
     var platform = GSS.Platforms.detect(requestUrl, config);
     if (!platform || !GSS.Platforms.enabled(platform, config)) { GSS.Runtime.passThrough(); return; }
+    var discoveryMode = platform.id === "discovery" ? String(config.discoveryMode || "full") : "full";
+    if (discoveryMode === "off") { GSS.Runtime.passThrough(); return; }
     var output = body;
     var contentType = "";
 
@@ -1401,10 +1413,12 @@ GSS.MPD = (function createMpdTools() {
       contentType = "application/vnd.apple.mpegurl; charset=utf-8";
       record(platform, media ? "hls-media" : "hls-master", output !== body, summary);
     } else if (/<MPD\b/i.test(body)) {
+      if (discoveryMode === "hls-only") { GSS.Runtime.passThrough(); return; }
       output = GSS.MPD.injectTrack(body, requestUrl, config, logger, platform);
       contentType = "application/dash+xml; charset=utf-8";
       record(platform, "dash", output !== body, {});
     } else if (/^\s*[\[{]/.test(body) && /^(max|discovery|paramount|paramount-live)$/.test(platform.id)) {
+      if (discoveryMode === "hls-only") { GSS.Runtime.passThrough(); return; }
       var jsonResult = GSS.PlaybackJson.inject(body, requestUrl, config, logger, platform);
       output = jsonResult.body;
       contentType = "application/json; charset=utf-8";

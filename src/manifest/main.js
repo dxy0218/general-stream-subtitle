@@ -20,6 +20,8 @@
     var requestUrl = GSS.Runtime.request.url || "";
     var platform = GSS.Platforms.detect(requestUrl, config);
     if (!platform || !GSS.Platforms.enabled(platform, config)) { GSS.Runtime.passThrough(); return; }
+    var discoveryMode = platform.id === "discovery" ? String(config.discoveryMode || "full") : "full";
+    if (discoveryMode === "off") { GSS.Runtime.passThrough(); return; }
     var output = body;
     var contentType = "";
 
@@ -30,10 +32,12 @@
       contentType = "application/vnd.apple.mpegurl; charset=utf-8";
       record(platform, media ? "hls-media" : "hls-master", output !== body, summary);
     } else if (/<MPD\b/i.test(body)) {
+      if (discoveryMode === "hls-only") { GSS.Runtime.passThrough(); return; }
       output = GSS.MPD.injectTrack(body, requestUrl, config, logger, platform);
       contentType = "application/dash+xml; charset=utf-8";
       record(platform, "dash", output !== body, {});
     } else if (/^\s*[\[{]/.test(body) && /^(max|discovery|paramount|paramount-live)$/.test(platform.id)) {
+      if (discoveryMode === "hls-only") { GSS.Runtime.passThrough(); return; }
       var jsonResult = GSS.PlaybackJson.inject(body, requestUrl, config, logger, platform);
       output = jsonResult.body;
       contentType = "application/json; charset=utf-8";

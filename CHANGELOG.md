@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.5.6
+
+- Add `DISCOVERY_MODE=full|hls-only|off` for Apple TV compatibility isolation without clearing saved provider settings.
+- Make the Discovery compatibility mode override stale `gss.local` settings while leaving normal configuration precedence unchanged.
+
 ## 0.5.5
 
 - Restrict default Discovery+ HTTPS interception to identifiable media CDN hosts so Apple TV device and account setup requests bypass MITM.
