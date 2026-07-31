@@ -78,7 +78,7 @@ const youtubeUrl = `${rawBase}/dist/youtube.js`;
 const youtubeCaptionUrl = `${rawBase}/dist/youtube-caption.js`;
 const defaultArgs = "source=auto&target=zh-CN&trackName=Translate-zh&provider=google-free&platforms=all&discoveryMode=full&safePlayback=false&formats=all&genericMode=false&youtubeStrategy=direct&youtubeUseAsr=true&youtubeLive=true&youtubePreferManual=true&injectTranslated=false&bilingualOrder=translation-first&cacheEnabled=true&logEnabled=true&debug=false";
 const surgeArgs = "source=%SOURCE%&target=%TARGET%&trackName=%TRACK_NAME%&provider=%PROVIDER%&platforms=%PLATFORMS%&discoveryMode=%DISCOVERY_MODE%&formats=%FORMATS%&genericMode=%GENERIC%&youtubeStrategy=%YT_STRATEGY%&youtubeUseAsr=%YT_ASR%&youtubeLive=%YT_LIVE%&youtubePreferManual=%YT_MANUAL%&injectTranslated=%PURE_TRACK%&bilingualOrder=%ORDER%&cacheEnabled=%CACHE%&logEnabled=%LOGS%&debug=%DEBUG%";
-const shadowArgs = "presetMode=true&safePlayback=true&platformDiscovery={{{DISCOVERY}}}&discoveryHlsOnly={{{DISCOVERY_HLS_ONLY}}}&platformMax={{{MAX}}}&platformPluto={{{PLUTO}}}&platformPrime={{{PRIME}}}&platformHulu={{{HULU}}}&platformYoutube={{{YOUTUBE}}}&youtubeUseAsr={{{YT_ASR}}}&youtubeLive={{{YT_LIVE}}}&injectTranslated={{{PURE_TRACK}}}&cacheEnabled={{{CACHE}}}&logEnabled={{{LOGS}}}&debug={{{DEBUG}}}";
+const shadowArgs = "presetMode=true&safePlayback=true&hyMt2Preset={{{HY_MT2}}}&platformDiscovery={{{DISCOVERY}}}&discoveryHlsOnly={{{DISCOVERY_HLS_ONLY}}}&platformMax={{{MAX}}}&platformPluto={{{PLUTO}}}&platformPrime={{{PRIME}}}&platformHulu={{{HULU}}}&platformYoutube={{{YOUTUBE}}}&youtubeUseAsr={{{YT_ASR}}}&youtubeLive={{{YT_LIVE}}}&injectTranslated={{{PURE_TRACK}}}&cacheEnabled={{{CACHE}}}&logEnabled={{{LOGS}}}&debug={{{DEBUG}}}";
 const shadowSwitches = [
   { key: "DISCOVERY", value: false, description: "Discovery+ 实验适配；默认关闭，打开后仅处理 HLS 主清单" },
   { key: "DISCOVERY_HLS_ONLY", value: true, description: "Discovery+ 播放保护；保持开启以跳过 DASH 和播放 JSON" },
@@ -89,6 +89,7 @@ const shadowSwitches = [
   { key: "YOUTUBE", value: true, description: "YouTube / YouTube TV 中文字幕" },
   { key: "YT_ASR", value: true, description: "允许 YouTube 自动生成字幕" },
   { key: "YT_LIVE", value: true, description: "处理 YouTube 直播文本字幕" },
+  { key: "HY_MT2", value: false, description: "使用私有 Hy-MT2 翻译服务；先在 gss.local 保存 Endpoint 和 API Key" },
   { key: "PURE_TRACK", value: false, description: "额外显示纯翻译字幕轨" },
   { key: "CACHE", value: true, description: "启用翻译缓存" },
   { key: "LOGS", value: true, description: "保存脱敏运行日志，便于排查播放和字幕错误" },

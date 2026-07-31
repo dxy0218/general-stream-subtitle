@@ -1,4 +1,4 @@
-// General Stream Subtitle 0.6.1 - youtube-caption
+// General Stream Subtitle 0.6.2 - youtube-caption
 // MIT License - generated file; edit src/ instead.
 (function () {
 "use strict";
@@ -230,7 +230,7 @@ GSS.Language = (function createLanguageTools() {
   };
 })();
 
-GSS.VERSION = "0.6.1";
+GSS.VERSION = "0.6.2";
 GSS.SETTINGS_KEY = "GSS_SETTINGS_V4";
 GSS.PROVIDER_SECRETS_KEY = "GSS_PROVIDER_SECRETS_V1";
 GSS.ADMIN_TOKEN_KEY = "GSS_ADMIN_TOKEN_V1";
@@ -256,6 +256,7 @@ GSS.DEFAULTS = {
   discoveryMode: "full",
   safePlayback: false,
   presetMode: false,
+  hyMt2Preset: false,
   platformDiscovery: false,
   discoveryHlsOnly: true,
   platformMax: true,
@@ -305,7 +306,7 @@ GSS.allowedSettings = {
   providerModel: "string", providerRegion: "string", providerProject: "string", providerLocation: "string",
   providerPrompt: "string", source: "string", sourcePriority: "string", target: "string", trackName: "string",
   injectTranslated: "boolean", translatedTrackName: "string", bilingualOrder: "string", platforms: "string", discoveryMode: "string",
-  safePlayback: "boolean", presetMode: "boolean", platformDiscovery: "boolean", discoveryHlsOnly: "boolean",
+  safePlayback: "boolean", presetMode: "boolean", hyMt2Preset: "boolean", platformDiscovery: "boolean", discoveryHlsOnly: "boolean",
   platformMax: "boolean", platformPluto: "boolean", platformPrime: "boolean", platformHulu: "boolean", platformYoutube: "boolean",
   formats: "string", genericMode: "boolean", customDomains: "string", youtubeStrategy: "string",
   youtubeUseAsr: "boolean", youtubeLive: "boolean", youtubePreferManual: "boolean", logEnabled: "boolean", debug: "boolean", cacheEnabled: "boolean",
@@ -374,6 +375,7 @@ GSS.getConfig = function getConfig() {
   // even when older gss.local settings override normal module parameters.
   if (forcedDiscoveryMode) config.discoveryMode = forcedDiscoveryMode;
   if (args.presetMode) {
+    var useHyMt2 = !!args.hyMt2Preset;
     var presetPlatforms = [];
     if (args.platformDiscovery) presetPlatforms.push("discovery");
     if (args.platformMax) presetPlatforms.push("max");
@@ -385,7 +387,18 @@ GSS.getConfig = function getConfig() {
     config.source = "auto";
     config.target = "zh-CN";
     config.trackName = "Translate-zh";
-    config.provider = "google-free";
+    config.provider = useHyMt2 ? "openai-compatible" : "google-free";
+    config.fallbackProviders = useHyMt2 ? "google-free" : "";
+    if (useHyMt2) {
+      // Keep providerEndpoint in persistent settings so a private server URL and
+      // API key never enter the public module. Shadowrocket only selects the
+      // tested Hy-MT2 request profile here.
+      config.providerModel = "hy-mt2-1.8b";
+      config.providerPrompt = "Translate each subtitle naturally and concisely into Simplified Chinese. Preserve names, tone, punctuation, item count, and item order.";
+      config.translationConcurrency = 1;
+      config.batchItems = 3;
+      config.batchChars = 480;
+    }
     config.platforms = presetPlatforms.join("|") || "none";
     config.discoveryMode = args.platformDiscovery ? (args.discoveryHlsOnly === false ? "full" : "hls-only") : "off";
     config.formats = "all";
@@ -401,6 +414,7 @@ GSS.getConfig = function getConfig() {
     config.debug = !!args.debug;
     config.safePlayback = true;
     config.presetMode = true;
+    config.hyMt2Preset = useHyMt2;
   }
   config.source = config.source || "auto";
   config.provider = config.provider || "google-free";

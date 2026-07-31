@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.6.2
+
+- Add a native Shadowrocket `HY_MT2` switch for a private OpenAI-compatible Hy-MT2 translation service.
+- Preserve the private Endpoint and API Key in `gss.local` storage instead of publishing credentials in module arguments.
+- Force one translation request at a time with smaller subtitle batches for low-memory CPU VPS deployments.
+- Fall back to `google-free` when the private Hy-MT2 service is not configured or temporarily unavailable.
+
 ## 0.6.1
 
 - Add an enabled-by-default, bounded persistent event log for manifest, gateway, translation, fallback, YouTube and exception stages.

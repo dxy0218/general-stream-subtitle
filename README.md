@@ -4,7 +4,7 @@
 
 项目通过 HTTPS MITM 读取播放器清单、播放器响应或文本字幕，在原有字幕菜单中加入一个可见的 **`Translate-zh`** 轨道。只有当用户选择该轨道后，模块才获取原字幕、调用翻译 Provider，并返回双语或纯翻译字幕。
 
-> 当前版本：**v0.6.1**
+> 当前版本：**v0.6.2**
 > 支持系统：iOS、iPadOS、macOS、tvOS（具体能力取决于代理客户端与流媒体 App）  
 > 开源协议：MIT
 
@@ -281,7 +281,7 @@ Shadowrocket 的 v0.6.0 安全预设属于例外：模块编辑页中的平台�
 
 Shadowrocket 和 Surge 可以直接编辑常用模块参数。Loon 建议通过 `gss.local` 管理页面配置。
 
-Shadowrocket 原生编辑器不会把字符串候选值渲染成下拉菜单，因此 v0.6.0 改为只暴露布尔开关。固定预设为：自动识别源语言、翻译为简体中文、`Translate-zh`、`google-free`、HLS 播放保护。高级 Provider、语言和格式仍可在 Surge/Loon 或源码配置中使用。
+Shadowrocket 原生编辑器不会把字符串候选值渲染成下拉菜单，因此模块只暴露布尔开关。默认预设为：自动识别源语言、翻译为简体中文、`Translate-zh`、`google-free`、HLS 播放保护。打开 `HY_MT2` 后改用保存在 `gss.local` 中的私有 OpenAI-compatible Endpoint 和 API Key；未配置或请求失败时自动回退到 `google-free`。
 
 | 模块参数 | 默认值 | 说明 |
 |---|---|---|
@@ -294,10 +294,21 @@ Shadowrocket 原生编辑器不会把字符串候选值渲染成下拉菜单，�
 | `YOUTUBE` | `true` | YouTube / YouTube TV 中文字幕 |
 | `YT_ASR` | `true` | 是否允许使用 YouTube 自动生成字幕 |
 | `YT_LIVE` | `true` | 是否处理 YouTube 直播文本字幕 |
+| `HY_MT2` | `false` | 使用私有 Hy-MT2 服务；需先在 `gss.local` 保存 Endpoint 和 API Key |
 | `PURE_TRACK` | `false` | 是否额外显示纯翻译字幕轨 |
 | `CACHE` | `true` | 是否启用翻译缓存 |
 | `LOGS` | `true` | 保存脱敏运行日志，方便排查播放和字幕错误 |
 | `DEBUG` | `false` | 是否在客户端控制台输出详细日志 |
+
+#### Shadowrocket 使用私有 Hy-MT2
+
+1. 更新模块后先打开 `HY_MT2`。
+2. 在 Shadowrocket 开启模块和 MITM 后访问 `http://gss.local/`。
+3. Provider 会自动切换为 `openai-compatible`，模型固定为 `hy-mt2-1.8b`。
+4. 将私有服务的 Base URL（以 `/v1` 结尾）填入 Endpoint，并粘贴 API Key 后保存。
+5. 保持 `CACHE` 和 `LOGS` 开启，完全退出流媒体 App 后重新播放。
+
+Endpoint 与 API Key 只保存在当前代理客户端的 persistentStore 中，不会写入模块文件、公开配置响应或运行日志。低内存 CPU VPS 会自动使用单并发和小批次；未配置密钥、服务超时或返回无效内容时会回退到 `google-free`。
 
 Surge 继续提供 `SOURCE`、`TARGET`、`PROVIDER`、`PLATFORMS`、`DISCOVERY_MODE` 等文本参数；完整自定义配置仍可通过 `gss.local` 管理。
 

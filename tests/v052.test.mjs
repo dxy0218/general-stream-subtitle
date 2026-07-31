@@ -123,6 +123,34 @@ test("Shadowrocket preset overrides stale settings and injects all five requeste
   }
 });
 
+test("Shadowrocket Hy-MT2 preset keeps private endpoint and applies low-memory request limits", () => {
+  const { store, persistent } = storeRuntime();
+  store.set("GSS_SETTINGS_V4", JSON.stringify({
+    provider: "google-free",
+    providerEndpoint: "https://private-translator.example:9443/v1",
+    providerModel: "stale-model",
+    translationConcurrency: 4,
+    batchItems: 12,
+    batchChars: 1600
+  }));
+  let result;
+  run("dist/gateway.js", {
+    $request: { url: "http://gss.local/health", method: "GET", headers: {} },
+    $argument: "presetMode=true&safePlayback=true&hyMt2Preset=true&platformMax=true&platformYoutube=false",
+    $persistentStore: persistent,
+    $done(p) { result = p; }
+  });
+  const config = JSON.parse(result.response.body).config;
+  assert.equal(config.provider, "openai-compatible");
+  assert.equal(config.fallbackProviders, "google-free");
+  assert.equal(config.providerEndpoint, "https://private-translator.example:9443/v1");
+  assert.equal(config.providerModel, "hy-mt2-1.8b");
+  assert.equal(config.translationConcurrency, 1);
+  assert.equal(config.batchItems, 3);
+  assert.equal(config.batchChars, 480);
+  assert.equal(config.hyMt2Preset, true);
+});
+
 test("safe playback preset bypasses non-HLS responses and a disabled Discovery adapter", () => {
   const hls = fs.readFileSync(path.join(root, "tests/fixtures/master.m3u8"), "utf8");
   const mpd = fs.readFileSync(path.join(root, "tests/fixtures/simple.mpd"), "utf8");
@@ -243,12 +271,13 @@ test("Shadowrocket exposes only native boolean switches", () => {
   const descriptionLine = content.split("\n").find((line) => line.startsWith("#!arguments-desc="));
   const entries = argumentLine.slice("#!arguments=".length).split(",").map((entry) => entry.trim().split(":"));
   const names = entries.map(([name]) => name);
-  assert.deepEqual(names, ["DISCOVERY", "DISCOVERY_HLS_ONLY", "MAX", "PLUTO", "PRIME", "HULU", "YOUTUBE", "YT_ASR", "YT_LIVE", "PURE_TRACK", "CACHE", "LOGS", "DEBUG"]);
+  assert.deepEqual(names, ["DISCOVERY", "DISCOVERY_HLS_ONLY", "MAX", "PLUTO", "PRIME", "HULU", "YOUTUBE", "YT_ASR", "YT_LIVE", "HY_MT2", "PURE_TRACK", "CACHE", "LOGS", "DEBUG"]);
   for (const [name, value] of entries) {
     assert.match(value, /^(?:true|false)$/);
     assert.match(descriptionLine, new RegExp(`${name}: `));
   }
   assert.match(content, /presetMode=true/);
+  assert.match(content, /hyMt2Preset=\{\{\{HY_MT2\}\}\}/);
   assert.match(content, /safePlayback/);
   assert.doesNotMatch(argumentLine, /SOURCE|TARGET|PROVIDER|PLATFORMS|FORMATS|ORDER/);
 });
