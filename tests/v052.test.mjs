@@ -145,7 +145,7 @@ test("Shadowrocket Hy-MT2 preset keeps the private endpoint and normal fallback 
   assert.equal(config.fallbackProviders, "google-free");
   assert.equal(config.providerEndpoint, "https://private-translator.example:9443/v1");
   assert.equal(config.providerModel, "hy-mt2-1.8b");
-  assert.equal(config.translationConcurrency, 2);
+  assert.equal(config.translationConcurrency, 4);
   assert.equal(config.batchItems, 12);
   assert.equal(config.batchChars, 1600);
   assert.equal(config.hyMt2Preset, true);

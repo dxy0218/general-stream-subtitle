@@ -76,6 +76,29 @@ test("gives injected Apple subtitle tracks a unique stable rendition id", () => 
   assert.match(ids[1],/^gss-[0-9a-f]+$/);
 });
 
+test("keeps an injected rendition stable across Max CDN refreshes", () => {
+  const { GSS } = load(core);
+  const body = [
+    "#EXTM3U",
+    '#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="English",LANGUAGE="en",DEFAULT=YES,AUTOSELECT=YES,STABLE-RENDITION-ID="subtitle.en",URI="subs/en.m3u8"',
+    '#EXT-X-STREAM-INF:BANDWIDTH=1000000,SUBTITLES="subs"',
+    "video/main.m3u8"
+  ].join("\n");
+  const urls = [
+    "https://gcp.prd.media.h264.io/title/hls.m3u8",
+    "https://akm.prd.media.h264.io/title/hls.m3u8",
+    "https://cf.prd.media.h264.io/title/hls.m3u8"
+  ];
+  const ids = urls.map((url) => {
+    const output = GSS.M3U8.injectTracks(body, url, GSS.DEFAULTS, {info(){}}, {id:"max"});
+    const lines = output.split("\n").filter((line) => /NAME="Translate-zh"/.test(line));
+    assert.equal(lines.length, 1);
+    assert.match(lines[0], /AUTOSELECT=YES/);
+    return lines[0].match(/STABLE-RENDITION-ID="([^"]+)"/)[1];
+  });
+  assert.equal(new Set(ids).size, 1);
+});
+
 test("optionally injects a pure translated track", () => {
   const { GSS } = load(core);
   const body = fs.readFileSync(path.join(root,"tests/fixtures/master.m3u8"),"utf8");

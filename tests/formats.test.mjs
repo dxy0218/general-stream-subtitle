@@ -24,3 +24,29 @@ test("supports SRT",()=>check("sample.srt","https://x/sub.srt","application/x-su
 test("supports TTML/DFXP text",()=>check("sample.ttml","https://x/sub.ttml","application/ttml+xml","ttml"));
 test("supports ASS/SSA",()=>check("sample.ass","https://x/sub.ass","text/plain","ass"));
 test("supports generic JSON cues",()=>check("sample.json","https://x/sub.json","application/json","json"));
+
+test("WebVTT cue identifiers never become translated cue text", () => {
+  const GSS = load();
+  const body = [
+    "WEBVTT",
+    "X-TIMESTAMP-MAP=MPEGTS:900000,LOCAL:00:00:00.000",
+    "",
+    "1",
+    "00:00:01.000 --> 00:00:03.000 align:middle",
+    "Hello",
+    "",
+    "2",
+    "00:00:04.000 --> 00:00:06.000",
+    "World",
+    ""
+  ].join("\n");
+  const parsed = GSS.VTT.parse(body);
+  assert.deepEqual(Array.from(GSS.VTT.uniqueTexts(parsed.cues)), ["Hello", "World"]);
+  const output = GSS.VTT.render(parsed, ["\u4f60\u597d\n\n", "\u4e16\u754c"], "bilingual", "translation-first");
+  const reparsed = GSS.VTT.parse(output);
+  assert.equal(reparsed.cues.length, 2);
+  assert.deepEqual(Array.from(reparsed.cues, (cue) => cue.text), ["\u4f60\u597d\nHello", "\u4e16\u754c\nWorld"]);
+  assert.equal((output.match(/^1$/gm) || []).length, 1);
+  assert.equal((output.match(/^2$/gm) || []).length, 1);
+  assert.match(output, /X-TIMESTAMP-MAP=MPEGTS:900000/);
+});

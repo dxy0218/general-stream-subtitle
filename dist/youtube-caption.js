@@ -1,4 +1,4 @@
-// General Stream Subtitle 0.6.5 - youtube-caption
+// General Stream Subtitle 0.6.6 - youtube-caption
 // MIT License - generated file; edit src/ instead.
 (function () {
 "use strict";
@@ -247,7 +247,7 @@ GSS.Language = (function createLanguageTools() {
   };
 })();
 
-GSS.VERSION = "0.6.5";
+GSS.VERSION = "0.6.6";
 GSS.SETTINGS_KEY = "GSS_SETTINGS_V4";
 GSS.PROVIDER_SECRETS_KEY = "GSS_PROVIDER_SECRETS_V1";
 GSS.ADMIN_TOKEN_KEY = "GSS_ADMIN_TOKEN_V1";
@@ -414,7 +414,7 @@ GSS.getConfig = function getConfig() {
       config.providerPrompt = "Translate each subtitle naturally and concisely into Simplified Chinese. Preserve names, tone, punctuation, item count, and item order.";
       // These values belong to the fast fallback provider. The Hy-MT2 adapter
       // applies its own 512-token safety guard before sending a request.
-      config.translationConcurrency = 2;
+      config.translationConcurrency = 4;
       config.batchItems = 12;
       config.batchChars = 1600;
     }
@@ -877,20 +877,28 @@ GSS.VTT = (function createVTTTools() {
     return String(text || "").replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim();
   }
 
+  function isTimestampLine(line) {
+    return /^\s*(?:\d{2,}:)?\d{2}:\d{2}\.\d{3}\s+-->\s+(?:\d{2,}:)?\d{2}:\d{2}\.\d{3}(?:\s|$)/.test(String(line || ""));
+  }
+
+  function translatedLines(text) {
+    return String(text || "").replace(/\r\n/g, "\n").split("\n").map(function (line) {
+      return line.trim();
+    }).filter(function (line) { return !!line; });
+  }
+
   function parse(body) {
     var normalized = String(body || "").replace(/^\uFEFF/, "").replace(/\r\n/g, "\n");
     var lines = normalized.split("\n"), cues = [];
-    var timestamps = [];
 
-    for (var i = 0; i < lines.length; i += 1) {
-      if (lines[i].indexOf("-->") >= 0) timestamps.push(i);
-    }
-
-    for (var t = 0; t < timestamps.length; t += 1) {
-      var timestampLine = timestamps[t];
+    for (var timestampLine = 0; timestampLine < lines.length; timestampLine += 1) {
+      if (!isTimestampLine(lines[timestampLine])) continue;
       var startLine = timestampLine + 1;
-      var endLine = t + 1 < timestamps.length ? timestamps[t + 1] : lines.length;
-      while (endLine > startLine && !lines[endLine - 1].trim()) endLine -= 1;
+      var endLine = startLine;
+      // A blank line terminates a WebVTT cue. Stopping at the next timestamp
+      // incorrectly captures that cue's optional identifier ("1", "2", ...)
+      // as text and produces a malformed translated segment.
+      while (endLine < lines.length && lines[endLine].trim() && !isTimestampLine(lines[endLine])) endLine += 1;
       var originalLines = lines.slice(startLine, endLine);
       var plain = stripTags(originalLines.join("\n"));
       if (plain) {
@@ -920,20 +928,20 @@ GSS.VTT = (function createVTTTools() {
     var lines = parsed.lines.slice();
     var cues = parsed.cues.slice().sort(function (a, b) { return b.startLine - a.startLine; });
     cues.forEach(function (cue) {
-      var translated = String(translations[cue.translationIndex] || "").trim();
-      if (!translated) return;
+      var translated = translatedLines(translations[cue.translationIndex]);
+      if (!translated.length) return;
       var replacement;
       if (mode === "bilingual") {
         replacement = order === "original-first"
-          ? cue.originalLines.concat(translated.split("\n"))
-          : translated.split("\n").concat(cue.originalLines);
-      } else replacement = translated.split("\n");
+          ? cue.originalLines.concat(translated)
+          : translated.concat(cue.originalLines);
+      } else replacement = translated;
       lines.splice.apply(lines, [cue.startLine, Math.max(0, cue.endLine - cue.startLine)].concat(replacement));
     });
     return lines.join("\n");
   }
 
-  return { parse: parse, uniqueTexts: uniqueTexts, render: render, stripTags: stripTags };
+  return { parse: parse, uniqueTexts: uniqueTexts, render: render, stripTags: stripTags, isTimestampLine: isTimestampLine };
 })();
 
 GSS.Formats.register("vtt", {

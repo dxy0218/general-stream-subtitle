@@ -90,10 +90,22 @@ GSS.M3U8 = (function createM3U8Tools() {
     set(attributes, "NAME", name, true);
     set(attributes, "LANGUAGE", config.target, true);
     set(attributes, "DEFAULT", "NO", false);
-    set(attributes, "AUTOSELECT", "NO", false);
+    // Allow tvOS to restore the user's explicit Chinese selection after a
+    // multivariant playlist refresh without ever making it the default track.
+    set(attributes, "AUTOSELECT", "YES", false);
     set(attributes, "FORCED", "NO", false);
-    if (get(attributes, "STABLE-RENDITION-ID")) {
-      set(attributes, "STABLE-RENDITION-ID", "gss-" + GSS.Hash(absoluteOrigin + "|" + mode), true);
+    var sourceStableId = get(attributes, "STABLE-RENDITION-ID");
+    if (sourceStableId) {
+      // The source stable ID is intentionally independent of the selected CDN.
+      // Hashing the absolute URI caused Max's GCP/Akamai/CloudFront refreshes to
+      // present the same translated track as a different rendition.
+      set(attributes, "STABLE-RENDITION-ID", "gss-" + GSS.Hash([
+        sourceStableId,
+        get(attributes, "GROUP-ID") || "",
+        mode,
+        config.target,
+        platform ? platform.id : "unknown"
+      ].join("|")), true);
     }
     set(attributes, "URI", GSS.Url.virtual(config.virtualOrigin, "/playlist", {
       origin: absoluteOrigin,

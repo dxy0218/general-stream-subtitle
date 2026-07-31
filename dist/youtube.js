@@ -1,4 +1,4 @@
-// General Stream Subtitle 0.6.5 - youtube
+// General Stream Subtitle 0.6.6 - youtube
 // MIT License - generated file; edit src/ instead.
 (function () {
 "use strict";
@@ -247,7 +247,7 @@ GSS.Language = (function createLanguageTools() {
   };
 })();
 
-GSS.VERSION = "0.6.5";
+GSS.VERSION = "0.6.6";
 GSS.SETTINGS_KEY = "GSS_SETTINGS_V4";
 GSS.PROVIDER_SECRETS_KEY = "GSS_PROVIDER_SECRETS_V1";
 GSS.ADMIN_TOKEN_KEY = "GSS_ADMIN_TOKEN_V1";
@@ -414,7 +414,7 @@ GSS.getConfig = function getConfig() {
       config.providerPrompt = "Translate each subtitle naturally and concisely into Simplified Chinese. Preserve names, tone, punctuation, item count, and item order.";
       // These values belong to the fast fallback provider. The Hy-MT2 adapter
       // applies its own 512-token safety guard before sending a request.
-      config.translationConcurrency = 2;
+      config.translationConcurrency = 4;
       config.batchItems = 12;
       config.batchChars = 1600;
     }
