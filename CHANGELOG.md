@@ -2,10 +2,19 @@
 
 ## Unreleased
 
+## 0.6.0
+
+- Replace Shadowrocket string parameters with native boolean switches and a fixed Chinese subtitle preset.
+- Make Shadowrocket platform switches override stale `gss.local` settings and enable fail-open HLS-only playback protection.
+- Add dedicated Max/Discovery media-manifest, Prime Video HLS, Hulu VOD/live HLS, and expanded Pluto production-media rules.
+- Remove broad Max/Discovery account, session, GraphQL and API matching; remove broad Amazon S3 interception.
+- Default Discovery+ off on Shadowrocket while preserving an opt-in HLS-only adapter.
+- Add regression coverage for five-platform HLS injection, non-HLS bypass, switch behavior and sensitive endpoint isolation.
+
 ## 0.5.7
 
-- Declare a complete candidate list for every Shadowrocket module parameter so supported clients can render choice controls instead of requiring manually typed values.
-- Add presets for source/target languages, track names, providers, platforms, formats, Discovery compatibility, YouTube behavior, ordering, caching, and diagnostics.
+- Declare candidate metadata for Shadowrocket module parameters. Shadowrocket continued to render non-boolean values as text fields, which v0.6.0 replaces with switches.
+- Add documented candidate presets for source/target languages, providers, platforms and compatibility modes.
 
 ## 0.5.6
 

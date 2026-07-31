@@ -1,4 +1,4 @@
-// General Stream Subtitle 0.5.7 - youtube-caption
+// General Stream Subtitle 0.6.0 - youtube-caption
 // MIT License - generated file; edit src/ instead.
 (function () {
 "use strict";
@@ -230,7 +230,7 @@ GSS.Language = (function createLanguageTools() {
   };
 })();
 
-GSS.VERSION = "0.5.7";
+GSS.VERSION = "0.6.0";
 GSS.SETTINGS_KEY = "GSS_SETTINGS_V4";
 GSS.PROVIDER_SECRETS_KEY = "GSS_PROVIDER_SECRETS_V1";
 GSS.ADMIN_TOKEN_KEY = "GSS_ADMIN_TOKEN_V1";
@@ -254,6 +254,15 @@ GSS.DEFAULTS = {
   bilingualOrder: "translation-first",
   platforms: "all",
   discoveryMode: "full",
+  safePlayback: false,
+  presetMode: false,
+  platformDiscovery: false,
+  discoveryHlsOnly: true,
+  platformMax: true,
+  platformPluto: true,
+  platformPrime: true,
+  platformHulu: true,
+  platformYoutube: true,
   formats: "all",
   genericMode: false,
   customDomains: "",
@@ -295,6 +304,8 @@ GSS.allowedSettings = {
   providerModel: "string", providerRegion: "string", providerProject: "string", providerLocation: "string",
   providerPrompt: "string", source: "string", sourcePriority: "string", target: "string", trackName: "string",
   injectTranslated: "boolean", translatedTrackName: "string", bilingualOrder: "string", platforms: "string", discoveryMode: "string",
+  safePlayback: "boolean", presetMode: "boolean", platformDiscovery: "boolean", discoveryHlsOnly: "boolean",
+  platformMax: "boolean", platformPluto: "boolean", platformPrime: "boolean", platformHulu: "boolean", platformYoutube: "boolean",
   formats: "string", genericMode: "boolean", customDomains: "string", youtubeStrategy: "string",
   youtubeUseAsr: "boolean", youtubeLive: "boolean", youtubePreferManual: "boolean", debug: "boolean", cacheEnabled: "boolean",
   cacheTTL: "number", cacheLimit: "number", batchChars: "number", batchItems: "number", translationConcurrency: "number"
@@ -361,6 +372,34 @@ GSS.getConfig = function getConfig() {
   // This compatibility switch must remain controllable from module arguments
   // even when older gss.local settings override normal module parameters.
   if (forcedDiscoveryMode) config.discoveryMode = forcedDiscoveryMode;
+  if (args.presetMode) {
+    var presetPlatforms = [];
+    if (args.platformDiscovery) presetPlatforms.push("discovery");
+    if (args.platformMax) presetPlatforms.push("max");
+    if (args.platformPluto) presetPlatforms.push("pluto");
+    if (args.platformPrime) presetPlatforms.push("prime");
+    if (args.platformHulu) presetPlatforms.push("hulu");
+    if (args.platformYoutube) { presetPlatforms.push("youtube"); presetPlatforms.push("youtube-tv"); }
+    config.enabled = true;
+    config.source = "auto";
+    config.target = "zh-CN";
+    config.trackName = "Translate-zh";
+    config.provider = "google-free";
+    config.platforms = presetPlatforms.join("|") || "none";
+    config.discoveryMode = args.platformDiscovery ? (args.discoveryHlsOnly === false ? "full" : "hls-only") : "off";
+    config.formats = "all";
+    config.genericMode = !!args.genericMode;
+    config.youtubeStrategy = "direct";
+    config.youtubeUseAsr = args.youtubeUseAsr !== false;
+    config.youtubeLive = args.youtubeLive !== false;
+    config.youtubePreferManual = true;
+    config.injectTranslated = !!args.injectTranslated;
+    config.bilingualOrder = "translation-first";
+    config.cacheEnabled = args.cacheEnabled !== false;
+    config.debug = !!args.debug;
+    config.safePlayback = true;
+    config.presetMode = true;
+  }
   config.source = config.source || "auto";
   config.provider = config.provider || "google-free";
   config.trackName = config.trackName || "Translate-zh";

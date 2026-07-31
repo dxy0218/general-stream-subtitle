@@ -4,7 +4,7 @@
 
 项目通过 HTTPS MITM 读取播放器清单、播放器响应或文本字幕，在原有字幕菜单中加入一个可见的 **`Translate-zh`** 轨道。只有当用户选择该轨道后，模块才获取原字幕、调用翻译 Provider，并返回双语或纯翻译字幕。
 
-> 当前版本：**v0.5.4**
+> 当前版本：**v0.6.0**
 > 支持系统：iOS、iPadOS、macOS、tvOS（具体能力取决于代理客户端与流媒体 App）  
 > 开源协议：MIT
 
@@ -129,7 +129,7 @@ gss.local
 
 当前模块不需要对 `*.googlevideo.com` 做 MITM，因为它不修改 YouTube 视频或音频流。给视频 CDN 强制解密可能增加性能消耗或导致播放异常。
 
-在 Apple TV + Shadowrocket 上使用 Discovery+ 时，默认模块只解密可识别的 Discovery 媒体 CDN。`*.discoveryplus.com`、`*.disco-api.com` 等账号、设备和应用 API 域名会绕过 MITM，避免触发“There's a Problem With Your Device Setup”。不要为了扩大匹配范围而手动把这些整站域名加入 MITM。
+在 Apple TV + Shadowrocket 上使用 Discovery+ 时，默认开关为关闭。即使打开，也只检查可识别媒体 CDN 上的 HLS 主清单；`*.discoveryplus.com`、`*.disco-api.com`、Max/Discovery 的账户、设备、GraphQL、播放会话和 DRM 接口都会绕过脚本规则。不要为了扩大匹配范围而手动把这些整站域名加入 MITM。
 
 如果使用 `customDomains` 接入自定义平台，还需要在代理软件的 MITM hostname 中手动加入对应域名。管理页面能够保存自定义域名，但无法动态改写客户端的 MITM 域名列表。
 
@@ -141,16 +141,16 @@ gss.local
 
 | 平台 | 平台 ID | 当前处理范围 |
 |---|---|---|
-| Max / HBO Max | `max` | HLS/DASH、播放 JSON 与 WebVTT |
+| Max / HBO Max | `max` | HLS/DASH + WebVTT；Shadowrocket 安全预设只处理 HLS |
 | Apple TV | `apple-tv` | HLS + WebVTT |
 | Apple TV+ | `apple-tv-plus` | HLS + WebVTT |
 | Apple Fitness+ | `apple-fitness` | HLS workout 清单 + WebVTT |
 | Disney+ | `disney` | HLS + WebVTT |
-| Prime Video | `prime` | 以 HLS 文本字幕为主；复杂 DASH/TTML 分段仍有限制 |
-| Hulu | `hulu` | HLS + WebVTT |
+| Prime Video | `prime` | 专用 HLS 主清单规则 + 文本字幕；DASH/DRM 原样放行 |
+| Hulu | `hulu` | 点播与直播 HLS 主清单 + WebVTT |
 | Paramount+ | `paramount` | HLS + WebVTT |
 | Peacock | `peacock` | HLS + WebVTT |
-| Discovery+ | `discovery` | Discovery 媒体 CDN 上的 HLS/DASH、播放 JSON 与 WebVTT |
+| Discovery+ | `discovery` | Shadowrocket 默认关闭且仅处理 HLS；Surge/Loon 可处理媒体 CDN 的 HLS/DASH |
 | Fubo | `fubo` | HLS + WebVTT |
 | TED | `ted` | HLS + WebVTT |
 
@@ -163,7 +163,7 @@ gss.local
 | BBC iPlayer | `bbc` | 通用 HLS / 文本字幕适配 |
 | Rakuten Viki | `viki` | 通用 HLS / 文本字幕适配 |
 | Tubi | `tubi` | 通用 HLS / 文本字幕适配 |
-| Pluto TV | `pluto` | 通用 HLS / 文本字幕适配 |
+| Pluto TV | `pluto` | 专用 Stitcher/生产媒体主机 HLS + 文本字幕适配 |
 | Crunchyroll / VRV | `crunchyroll` | 通用 HLS/DASH 文本字幕适配 |
 | DAZN | `dazn` | 通用直播清单与文本字幕适配 |
 | Plex | `plex` | 仅播放器暴露为 HLS/DASH 文本字幕时可用 |
@@ -266,7 +266,7 @@ http://gss.local/
 http://127.0.0.1:6170/gss/
 ```
 
-管理页面适合设置完整参数、Provider Endpoint、模型名称和 API Key。保存后的持久化设置优先级高于模块参数。
+管理页面适合设置完整参数、Provider Endpoint、模型名称和 API Key。Surge/Loon 的持久化设置优先级高于模块参数。
 
 配置优先级为：
 
@@ -274,34 +274,30 @@ http://127.0.0.1:6170/gss/
 内置默认值 → 模块参数 → gss.local 持久化设置
 ```
 
-因此，如果修改模块参数后没有生效，请检查管理页面中是否保存过旧设置。
-
-`DISCOVERY_MODE` 是兼容性诊断开关，属于例外：模块参数始终优先于 `gss.local` 中的旧设置，因此可以在 Apple TV 上可靠地切换 Discovery+ 的处理范围。
+Shadowrocket 的 v0.6.0 安全预设属于例外：模块编辑页中的平台开关会覆盖 `gss.local` 旧设置，避免界面已经关闭平台但旧配置仍继续改写播放响应。
 
 ### 方法二：模块参数
 
 Shadowrocket 和 Surge 可以直接编辑常用模块参数。Loon 建议通过 `gss.local` 管理页面配置。
 
-Shadowrocket 模块从 v0.5.7 起为全部编辑参数声明候选值。更新模块后，在“编辑参数”中直接选择语言、平台、Provider、Discovery 兼容模式等预设；需要任意自定义值时仍可在 `http://gss.local/` 中保存。
+Shadowrocket 原生编辑器不会把字符串候选值渲染成下拉菜单，因此 v0.6.0 改为只暴露布尔开关。固定预设为：自动识别源语言、翻译为简体中文、`Translate-zh`、`google-free`、HLS 播放保护。高级 Provider、语言和格式仍可在 Surge/Loon 或源码配置中使用。
 
 | 模块参数 | 默认值 | 说明 |
 |---|---|---|
-| `SOURCE` | `auto` | 源语言；也可以填 `en`、`ja`、`ko` 等 |
-| `TARGET` | `zh-CN` | 目标语言 |
-| `TRACK_NAME` | `Translate-zh` | 字幕菜单中显示的名称 |
-| `PROVIDER` | `google-free` | 主翻译 Provider |
-| `PLATFORMS` | `all` | 启用的平台 ID，多个用 `|` 或逗号分隔 |
-| `DISCOVERY_MODE` | `full` | Discovery+：`full` 全部处理、`hls-only` 仅处理 HLS、`off` 原样放行 |
-| `FORMATS` | `all` | 启用的字幕格式 |
-| `GENERIC` | `false` | 是否启用通用 HLS/DASH 检查 |
-| `YT_STRATEGY` | `direct` | YouTube 字幕接管：`direct` 或 `virtual` |
+| `DISCOVERY` | `false` | Discovery+ 实验适配；确认基础播放正常后再打开 |
+| `DISCOVERY_HLS_ONLY` | `true` | Discovery+ 播放保护；建议保持开启 |
+| `MAX` | `true` | Max / HBO Max HLS 中文字幕 |
+| `PLUTO` | `true` | Pluto TV HLS 中文字幕 |
+| `PRIME` | `true` | Amazon Prime Video HLS 中文字幕 |
+| `HULU` | `true` | Hulu 点播/直播 HLS 中文字幕 |
+| `YOUTUBE` | `true` | YouTube / YouTube TV 中文字幕 |
 | `YT_ASR` | `true` | 是否允许使用 YouTube 自动生成字幕 |
 | `YT_LIVE` | `true` | 是否处理 YouTube 直播文本字幕 |
-| `YT_MANUAL` | `true` | 是否优先人工字幕 |
 | `PURE_TRACK` | `false` | 是否额外显示纯翻译字幕轨 |
-| `ORDER` | `translation-first` | 双语顺序；另一个值为 `original-first` |
 | `CACHE` | `true` | 是否启用翻译缓存 |
-| `DEBUG` | `true` | 是否输出调试日志 |
+| `DEBUG` | `false` | 是否输出调试日志 |
+
+Surge 继续提供 `SOURCE`、`TARGET`、`PROVIDER`、`PLATFORMS`、`DISCOVERY_MODE` 等文本参数；完整自定义配置仍可通过 `gss.local` 管理。
 
 ### 管理页面中的完整设置
 
@@ -420,6 +416,15 @@ cdn.example.net
 
 ## 版本更新记录
 
+### v0.6.0 — Apple TV 播放优先预设
+
+- Shadowrocket 编辑页改为全布尔开关，不再要求手动填写字符串参数。
+- 新增 Max、Pluto TV、Prime Video、Hulu 和 Discovery+ 的独立开关；Discovery+ 默认关闭。
+- Shadowrocket 开关强制覆盖旧的 `gss.local` 平台设置。
+- Max/Discovery 只匹配明确的媒体清单，账户、设备、播放会话、GraphQL 和 DRM 请求原样放行。
+- 新增 Prime Video 与 Hulu 点播/直播 HLS 专用规则，并扩充 Pluto TV 生产媒体主机。
+- 安全预设只改写 HLS 主清单；媒体分片、DASH、播放 JSON 和未知响应均保持原样。
+
 ### v0.1.0 — 初始可用版本
 
 - 建立独立的 General Stream Subtitle 项目。
@@ -536,16 +541,16 @@ http://gss.local/
 
 #### 播放出现异常
 
-- 将 `genericMode` 设为 `false`。
-- 只启用需要的平台，例如 `platforms=max|youtube`。
+- Shadowrocket 先关闭出现异常的平台开关，完全退出对应 App 后重新打开。
+- Discovery+ 默认保持 `DISCOVERY=false`；需要测试中文字幕时再打开，并保持 `DISCOVERY_HLS_ONLY=true`。
 - 不要给视频 CDN（如 `*.googlevideo.com`）额外开启 MITM。
 - 关闭纯翻译轨，减少字幕菜单和请求数量。
 - Apple TV / Fitness+ 出现异常时，先更新模块并完全退出 App；新版本会为注入轨生成独立 `STABLE-RENDITION-ID`，并移除改写后失效的 ETag/Digest。
-- Apple TV 上的 Discovery+ 可先设 `DISCOVERY_MODE=off` 验证纯 MITM；若能播放，再用 `hls-only` 隔离播放 JSON 注入。
+- Surge/Loon 用户可将 `genericMode=false`，并把 `platforms` 限制为实际需要的平台。
 
 #### 修改模块参数后没有变化
 
-`gss.local` 中保存的设置会覆盖模块参数。请在管理页面重置或更新对应设置。
+Shadowrocket v0.6.0 的平台开关会覆盖旧的 `gss.local` 设置；如果没有变化，请先更新模块，再完全退出 Shadowrocket 和目标 App 后重开。Surge/Loon 仍需在管理页面重置或更新旧设置。
 
 ### 日志关键词
 
