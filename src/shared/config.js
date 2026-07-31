@@ -28,12 +28,13 @@ GSS.DEFAULTS = {
   youtubeUseAsr: true,
   youtubeLive: true,
   youtubePreferManual: true,
-  debug: true,
+  debug: false,
   cacheEnabled: true,
   cacheTTL: 6 * 60 * 60 * 1000,
   cacheLimit: 120,
   batchChars: 1600,
   batchItems: 12,
+  translationConcurrency: 2,
   virtualOrigin: "https://gss.local"
 };
 
@@ -63,7 +64,7 @@ GSS.allowedSettings = {
   injectTranslated: "boolean", translatedTrackName: "string", bilingualOrder: "string", platforms: "string",
   formats: "string", genericMode: "boolean", customDomains: "string", youtubeStrategy: "string",
   youtubeUseAsr: "boolean", youtubeLive: "boolean", youtubePreferManual: "boolean", debug: "boolean", cacheEnabled: "boolean",
-  cacheTTL: "number"
+  cacheTTL: "number", cacheLimit: "number", batchChars: "number", batchItems: "number", translationConcurrency: "number"
 };
 
 GSS.normalizeSettings = function normalizeSettings(input) {
@@ -78,6 +79,7 @@ GSS.normalizeSettings = function normalizeSettings(input) {
   if (output.bilingualOrder && output.bilingualOrder !== "original-first") output.bilingualOrder = "translation-first";
   if (output.youtubeStrategy && output.youtubeStrategy !== "virtual") output.youtubeStrategy = "direct";
   if (output.source) output.source = GSS.Language ? GSS.Language.normalize(output.source) : String(output.source).toLowerCase();
+  if (output.translationConcurrency !== undefined) output.translationConcurrency = Math.max(1, Math.min(4, Math.floor(output.translationConcurrency)));
   return output;
 };
 

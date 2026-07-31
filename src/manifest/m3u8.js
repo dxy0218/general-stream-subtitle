@@ -92,6 +92,9 @@ GSS.M3U8 = (function createM3U8Tools() {
     set(attributes, "DEFAULT", "NO", false);
     set(attributes, "AUTOSELECT", "NO", false);
     set(attributes, "FORCED", "NO", false);
+    if (get(attributes, "STABLE-RENDITION-ID")) {
+      set(attributes, "STABLE-RENDITION-ID", "gss-" + GSS.Hash(absoluteOrigin + "|" + mode), true);
+    }
     set(attributes, "URI", GSS.Url.virtual(config.virtualOrigin, "/playlist", {
       origin: absoluteOrigin,
       mode: mode,

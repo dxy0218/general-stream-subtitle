@@ -16,12 +16,11 @@ GSS.Runtime = (function createRuntime() {
     var copy = cloneHeaders(headers);
     Object.keys(copy).forEach(function (key) {
       var lower = key.toLowerCase();
-      if (lower === "content-length" || lower === "content-encoding" || lower === "transfer-encoding") delete copy[key];
+      if (lower === "content-length" || lower === "content-encoding" || lower === "transfer-encoding"
+        || lower === "content-md5" || lower === "digest" || lower === "etag") delete copy[key];
+      if (contentType && lower === "content-type") delete copy[key];
     });
-    if (contentType) {
-      delete copy["content-type"];
-      copy["Content-Type"] = contentType;
-    }
+    if (contentType) copy["Content-Type"] = contentType;
     return copy;
   }
 

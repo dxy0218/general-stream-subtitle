@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Expand Discovery+ detection to regional Uplynk hosts, Discovery domains, and shared `dplus-*.h264.io` CDN hosts.
+- Add current Max `discomax.com` playback coverage and isolate Max/Discovery rules from the generic manifest rule.
+- Process Discovery+ playback JSON text-track arrays and broaden supported URL/language/label fields.
+- Give injected Apple subtitle tracks unique `STABLE-RENDITION-ID` values and remove stale response validators after body rewrites.
+- Bound playback-JSON traversal and skip DRM, ad, analytics, image, and tracking subtrees.
+- Disable verbose diagnostics by default and suppress informational logs unless debugging is enabled.
+- Translate independent Google-compatible batches with bounded concurrency while preserving cue order.
+
 ## 0.5.2
 
 - Restrict Pluto TV interception to known master-playlist hosts and paths.

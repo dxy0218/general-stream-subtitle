@@ -1,10 +1,11 @@
 GSS.PlaybackJson = (function createPlaybackJsonAdapter() {
   var SPECIFIC_ARRAY = /^(subtitles?|subtitleTracks?|textTracks?|captionTracks?|captions?|closedCaptions?)$/i;
   var GENERIC_ARRAY = /^(tracks?|renditions?|mediaTracks?|assets?)$/i;
-  var URL_KEYS = ["url", "uri", "src", "source", "baseUrl", "downloadUrl", "manifestUrl", "file"];
-  var LANGUAGE_KEYS = ["language", "lang", "languageCode", "srclang", "locale"];
-  var LABEL_KEYS = ["label", "name", "displayName", "title"];
+  var URL_KEYS = ["url", "uri", "src", "source", "href", "baseUrl", "downloadUrl", "manifestUrl", "streamUrl", "subtitleUrl", "captionUrl", "file"];
+  var LANGUAGE_KEYS = ["language", "lang", "languageCode", "languageTag", "srclang", "locale"];
+  var LABEL_KEYS = ["label", "name", "displayName", "display_name", "title"];
   var ID_KEYS = ["id", "trackId", "assetId", "renditionId"];
+  var SKIP_OBJECT = /^(ads?|advertising|analytics|beacons?|drm|images?|artwork|telemetry|tracking)$/i;
 
   function firstString(object, keys) {
     for (var i = 0; i < keys.length; i += 1) {
@@ -111,9 +112,12 @@ GSS.PlaybackJson = (function createPlaybackJsonAdapter() {
 
     var summary = { arraysInspected: 0, textTracks: 0, arraysChanged: 0, injected: 0, selectedLanguage: "", selectedName: "" };
     var maxInjections = 4;
+    var maxNodes = 5000;
+    var nodesVisited = 0;
 
     function walk(node, key, depth) {
-      if (!node || depth > 9 || summary.injected >= maxInjections) return;
+      nodesVisited += 1;
+      if (!node || depth > 9 || nodesVisited > maxNodes || summary.injected >= maxInjections) return;
       if (Array.isArray(node)) {
         var relevantKey = SPECIFIC_ARRAY.test(key || "") || GENERIC_ARRAY.test(key || "");
         if (relevantKey) {
@@ -138,7 +142,9 @@ GSS.PlaybackJson = (function createPlaybackJsonAdapter() {
         return;
       }
       if (typeof node === "object") {
-        Object.keys(node).forEach(function (childKey) { walk(node[childKey], childKey, depth + 1); });
+        Object.keys(node).forEach(function (childKey) {
+          if (!SKIP_OBJECT.test(childKey)) walk(node[childKey], childKey, depth + 1);
+        });
       }
     }
 
@@ -150,7 +156,8 @@ GSS.PlaybackJson = (function createPlaybackJsonAdapter() {
       });
       return { body: JSON.stringify(value), changed: true, summary: summary };
     }
-    summary.reason = summary.textTracks ? "no matching text track" : "no supported text-track array";
+    summary.nodesVisited = nodesVisited;
+    summary.reason = nodesVisited > maxNodes ? "node budget exceeded" : (summary.textTracks ? "no matching text track" : "no supported text-track array");
     logger.info("playback JSON inspected", { platform: platform ? platform.id : "unknown", injected: 0, reason: summary.reason, arrays: summary.arraysInspected, textTracks: summary.textTracks });
     return { body: body, changed: false, summary: summary };
   }

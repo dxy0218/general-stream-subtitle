@@ -53,3 +53,19 @@ test("OpenAI-compatible provider parses a strict translations object",()=>{
   assert.equal(request.url,"https://api.example.com/v1/chat/completions");
   assert.equal(JSON.parse(request.body).model,"model-x");
 });
+
+test("Google free provider translates independent batches concurrently and preserves order",()=>{
+  const pending=[];
+  const {GSS}=load({get(options,cb){pending.push({options,cb});}});
+  const config={...GSS.DEFAULTS,batchItems:1,batchChars:100,translationConcurrency:2};
+  const provider=GSS.Providers.create("google-free",config,logger);
+  let output,error;
+  provider.translateMany(["one","two","three"],"en","zh-CN",(e,v)=>{error=e;output=v;});
+  assert.equal(pending.length,2);
+  pending.shift().cb(null,{status:200},JSON.stringify([[["一"]]]));
+  assert.equal(pending.length,2);
+  pending.shift().cb(null,{status:200},JSON.stringify([[["二"]]]));
+  pending.shift().cb(null,{status:200},JSON.stringify([[["三"]]]));
+  assert.equal(error,null);
+  assert.deepEqual(Array.from(output),["一","二","三"]);
+});

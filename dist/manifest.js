@@ -21,12 +21,11 @@ GSS.Runtime = (function createRuntime() {
     var copy = cloneHeaders(headers);
     Object.keys(copy).forEach(function (key) {
       var lower = key.toLowerCase();
-      if (lower === "content-length" || lower === "content-encoding" || lower === "transfer-encoding") delete copy[key];
+      if (lower === "content-length" || lower === "content-encoding" || lower === "transfer-encoding"
+        || lower === "content-md5" || lower === "digest" || lower === "etag") delete copy[key];
+      if (contentType && lower === "content-type") delete copy[key];
     });
-    if (contentType) {
-      delete copy["content-type"];
-      copy["Content-Type"] = contentType;
-    }
+    if (contentType) copy["Content-Type"] = contentType;
     return copy;
   }
 
@@ -261,12 +260,13 @@ GSS.DEFAULTS = {
   youtubeUseAsr: true,
   youtubeLive: true,
   youtubePreferManual: true,
-  debug: true,
+  debug: false,
   cacheEnabled: true,
   cacheTTL: 6 * 60 * 60 * 1000,
   cacheLimit: 120,
   batchChars: 1600,
   batchItems: 12,
+  translationConcurrency: 2,
   virtualOrigin: "https://gss.local"
 };
 
@@ -296,7 +296,7 @@ GSS.allowedSettings = {
   injectTranslated: "boolean", translatedTrackName: "string", bilingualOrder: "string", platforms: "string",
   formats: "string", genericMode: "boolean", customDomains: "string", youtubeStrategy: "string",
   youtubeUseAsr: "boolean", youtubeLive: "boolean", youtubePreferManual: "boolean", debug: "boolean", cacheEnabled: "boolean",
-  cacheTTL: "number"
+  cacheTTL: "number", cacheLimit: "number", batchChars: "number", batchItems: "number", translationConcurrency: "number"
 };
 
 GSS.normalizeSettings = function normalizeSettings(input) {
@@ -311,6 +311,7 @@ GSS.normalizeSettings = function normalizeSettings(input) {
   if (output.bilingualOrder && output.bilingualOrder !== "original-first") output.bilingualOrder = "translation-first";
   if (output.youtubeStrategy && output.youtubeStrategy !== "virtual") output.youtubeStrategy = "direct";
   if (output.source) output.source = GSS.Language ? GSS.Language.normalize(output.source) : String(output.source).toLowerCase();
+  if (output.translationConcurrency !== undefined) output.translationConcurrency = Math.max(1, Math.min(4, Math.floor(output.translationConcurrency)));
   return output;
 };
 
@@ -363,7 +364,7 @@ GSS.getConfig = function getConfig() {
 GSS.Logger = function Logger(config, scope) {
   var prefix = "[GSS " + GSS.VERSION + "][" + GSS.Runtime.name + "][" + scope + "]";
   function print(level, message, data) {
-    if (level === "DEBUG" && !config.debug) return;
+    if (!config.debug && (level === "DEBUG" || level === "INFO")) return;
     var suffix = "";
     if (data !== undefined) {
       try { suffix = " " + JSON.stringify(data); } catch (_) { suffix = " " + String(data); }
@@ -568,14 +569,22 @@ GSS.Platforms = (function createPlatformRegistry() {
     { id: "apple-fitness", name: "Apple Fitness+", maturity: "stable", test: function (host, path) { return /(^|\.)itunes\.apple\.com$/.test(host) && /\/hls\/workout\//.test(path); } },
     { id: "apple-tv-plus", name: "Apple TV+", maturity: "stable", test: function (host, path) { return /(^|\.)itunes\.apple\.com$/.test(host) && /\/hls\/subscription\//.test(path); } },
     { id: "apple-tv", name: "Apple TV", maturity: "stable", test: function (host) { return /(^|\.)itunes\.apple\.com$/.test(host) || /(^|\.)tv\.apple\.com$/.test(host); } },
-    { id: "max", name: "Max / HBO Max", maturity: "stable", test: function (host) { return /(^|\.)(max\.com|h264\.io|hbomaxcdn\.com|api\.hbo\.com)$/.test(host); } },
+    {
+      id: "discovery",
+      name: "Discovery+",
+      maturity: "stable",
+      test: function (host) {
+        if (/(^|\.)(uplynk\.com|disco-api\.com|discoveryplus\.com|discoveryplus\.co\.uk|discoveryplus\.in)$/.test(host)) return true;
+        return /(^|\.)(?:dplus|discovery)[-.]/.test(host) && /(^|\.)(?:h264\.io|akamaized\.net)$/.test(host);
+      }
+    },
+    { id: "max", name: "Max / HBO Max", maturity: "stable", test: function (host) { return /(^|\.)(max\.com|discomax\.com|h264\.io|hbomaxcdn\.com|api\.hbo\.com)$/.test(host); } },
     { id: "disney", name: "Disney+", maturity: "stable", test: function (host) { return /\.(media|prod)\.(dssott|starott|dssedge)\.com$/.test(host); } },
     { id: "prime", name: "Prime Video", maturity: "stable", test: function (host) { return /(\.hls\.(pv-cdn|row\.aiv-cdn)\.net$|avodhlss3ww-a\.akamaihd\.net$|^s3\.amazonaws\.com$|^cf-timedtext\.aux\.pv-cdn\.net$|^(d1v5ir2lpwr8os|d22qjgkvxw22r6|d25xi40x97liuc|d27xxe7juh1us6|dmqdd6hw24ucf)\.cloudfront\.net$)/.test(host); } },
     { id: "hulu", name: "Hulu", maturity: "stable", test: function (host) { return /(^|\.)(hulustream\.com|huluim\.com)$/.test(host) || host === "assetshuluimcom-a.akamaihd.net"; } },
     { id: "paramount-live", name: "Paramount+ Live TV", maturity: "experimental", test: function (host, path, url) { return /(^|\.)(pplus\.paramount\.tech|paramount\.tech|paramountplus\.com|cbsaavideo\.com|cbsivideo\.com|cbs\.com)$/.test(host) && /(live|linear|channel|station|stream|broadcast)/i.test(String(path || "") + " " + String(url || "")); } },
     { id: "paramount", name: "Paramount+", maturity: "stable", test: function (host) { return /(^|\.)(pplus\.paramount\.tech|paramount\.tech|paramountplus\.com|cbsaavideo\.com|cbsivideo\.com|cbs\.com)$/.test(host); } },
     { id: "peacock", name: "Peacock", maturity: "stable", test: function (host) { return /\.cdn\.peacocktv\.com$/.test(host); } },
-    { id: "discovery", name: "Discovery+", maturity: "stable", test: function (host) { return host === "content-discovery.uplynk.com" || /dplus-ph-/.test(host); } },
     { id: "fubo", name: "Fubo", maturity: "stable", test: function (host) { return /-vod\.fubo\.tv$/.test(host); } },
     { id: "ted", name: "TED", maturity: "stable", test: function (host) { return host === "hls.ted.com"; } },
     { id: "bbc", name: "BBC iPlayer", maturity: "experimental", test: function (host) { return /(^|\.)bbci\.co\.uk$/.test(host) || /^vod-.*-live\.akamaized\.net$/.test(host); } },
@@ -909,10 +918,11 @@ GSS.Formats.register("json", (function createJsonFormat() {
 GSS.PlaybackJson = (function createPlaybackJsonAdapter() {
   var SPECIFIC_ARRAY = /^(subtitles?|subtitleTracks?|textTracks?|captionTracks?|captions?|closedCaptions?)$/i;
   var GENERIC_ARRAY = /^(tracks?|renditions?|mediaTracks?|assets?)$/i;
-  var URL_KEYS = ["url", "uri", "src", "source", "baseUrl", "downloadUrl", "manifestUrl", "file"];
-  var LANGUAGE_KEYS = ["language", "lang", "languageCode", "srclang", "locale"];
-  var LABEL_KEYS = ["label", "name", "displayName", "title"];
+  var URL_KEYS = ["url", "uri", "src", "source", "href", "baseUrl", "downloadUrl", "manifestUrl", "streamUrl", "subtitleUrl", "captionUrl", "file"];
+  var LANGUAGE_KEYS = ["language", "lang", "languageCode", "languageTag", "srclang", "locale"];
+  var LABEL_KEYS = ["label", "name", "displayName", "display_name", "title"];
   var ID_KEYS = ["id", "trackId", "assetId", "renditionId"];
+  var SKIP_OBJECT = /^(ads?|advertising|analytics|beacons?|drm|images?|artwork|telemetry|tracking)$/i;
 
   function firstString(object, keys) {
     for (var i = 0; i < keys.length; i += 1) {
@@ -1019,9 +1029,12 @@ GSS.PlaybackJson = (function createPlaybackJsonAdapter() {
 
     var summary = { arraysInspected: 0, textTracks: 0, arraysChanged: 0, injected: 0, selectedLanguage: "", selectedName: "" };
     var maxInjections = 4;
+    var maxNodes = 5000;
+    var nodesVisited = 0;
 
     function walk(node, key, depth) {
-      if (!node || depth > 9 || summary.injected >= maxInjections) return;
+      nodesVisited += 1;
+      if (!node || depth > 9 || nodesVisited > maxNodes || summary.injected >= maxInjections) return;
       if (Array.isArray(node)) {
         var relevantKey = SPECIFIC_ARRAY.test(key || "") || GENERIC_ARRAY.test(key || "");
         if (relevantKey) {
@@ -1046,7 +1059,9 @@ GSS.PlaybackJson = (function createPlaybackJsonAdapter() {
         return;
       }
       if (typeof node === "object") {
-        Object.keys(node).forEach(function (childKey) { walk(node[childKey], childKey, depth + 1); });
+        Object.keys(node).forEach(function (childKey) {
+          if (!SKIP_OBJECT.test(childKey)) walk(node[childKey], childKey, depth + 1);
+        });
       }
     }
 
@@ -1058,7 +1073,8 @@ GSS.PlaybackJson = (function createPlaybackJsonAdapter() {
       });
       return { body: JSON.stringify(value), changed: true, summary: summary };
     }
-    summary.reason = summary.textTracks ? "no matching text track" : "no supported text-track array";
+    summary.nodesVisited = nodesVisited;
+    summary.reason = nodesVisited > maxNodes ? "node budget exceeded" : (summary.textTracks ? "no matching text track" : "no supported text-track array");
     logger.info("playback JSON inspected", { platform: platform ? platform.id : "unknown", injected: 0, reason: summary.reason, arrays: summary.arraysInspected, textTracks: summary.textTracks });
     return { body: body, changed: false, summary: summary };
   }
@@ -1160,6 +1176,9 @@ GSS.M3U8 = (function createM3U8Tools() {
     set(attributes, "DEFAULT", "NO", false);
     set(attributes, "AUTOSELECT", "NO", false);
     set(attributes, "FORCED", "NO", false);
+    if (get(attributes, "STABLE-RENDITION-ID")) {
+      set(attributes, "STABLE-RENDITION-ID", "gss-" + GSS.Hash(absoluteOrigin + "|" + mode), true);
+    }
     set(attributes, "URI", GSS.Url.virtual(config.virtualOrigin, "/playlist", {
       origin: absoluteOrigin,
       mode: mode,
@@ -1355,7 +1374,7 @@ GSS.MPD = (function createMpdTools() {
   var logger = GSS.Logger(config, "manifest");
 
   function record(platform, type, changed, details) {
-    if (!GSS.Diagnostics) return;
+    if (!config.debug || !GSS.Diagnostics) return;
     GSS.Diagnostics.record({
       scope: "manifest",
       url: GSS.Runtime.request.url || "",
@@ -1385,7 +1404,7 @@ GSS.MPD = (function createMpdTools() {
       output = GSS.MPD.injectTrack(body, requestUrl, config, logger, platform);
       contentType = "application/dash+xml; charset=utf-8";
       record(platform, "dash", output !== body, {});
-    } else if (/^\s*[\[{]/.test(body) && /^(max|paramount|paramount-live)$/.test(platform.id)) {
+    } else if (/^\s*[\[{]/.test(body) && /^(max|discovery|paramount|paramount-live)$/.test(platform.id)) {
       var jsonResult = GSS.PlaybackJson.inject(body, requestUrl, config, logger, platform);
       output = jsonResult.body;
       contentType = "application/json; charset=utf-8";

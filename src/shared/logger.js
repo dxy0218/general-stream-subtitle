@@ -1,7 +1,7 @@
 GSS.Logger = function Logger(config, scope) {
   var prefix = "[GSS " + GSS.VERSION + "][" + GSS.Runtime.name + "][" + scope + "]";
   function print(level, message, data) {
-    if (level === "DEBUG" && !config.debug) return;
+    if (!config.debug && (level === "DEBUG" || level === "INFO")) return;
     var suffix = "";
     if (data !== undefined) {
       try { suffix = " " + JSON.stringify(data); } catch (_) { suffix = " " + String(data); }

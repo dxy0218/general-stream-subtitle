@@ -21,12 +21,11 @@ GSS.Runtime = (function createRuntime() {
     var copy = cloneHeaders(headers);
     Object.keys(copy).forEach(function (key) {
       var lower = key.toLowerCase();
-      if (lower === "content-length" || lower === "content-encoding" || lower === "transfer-encoding") delete copy[key];
+      if (lower === "content-length" || lower === "content-encoding" || lower === "transfer-encoding"
+        || lower === "content-md5" || lower === "digest" || lower === "etag") delete copy[key];
+      if (contentType && lower === "content-type") delete copy[key];
     });
-    if (contentType) {
-      delete copy["content-type"];
-      copy["Content-Type"] = contentType;
-    }
+    if (contentType) copy["Content-Type"] = contentType;
     return copy;
   }
 
@@ -261,12 +260,13 @@ GSS.DEFAULTS = {
   youtubeUseAsr: true,
   youtubeLive: true,
   youtubePreferManual: true,
-  debug: true,
+  debug: false,
   cacheEnabled: true,
   cacheTTL: 6 * 60 * 60 * 1000,
   cacheLimit: 120,
   batchChars: 1600,
   batchItems: 12,
+  translationConcurrency: 2,
   virtualOrigin: "https://gss.local"
 };
 
@@ -296,7 +296,7 @@ GSS.allowedSettings = {
   injectTranslated: "boolean", translatedTrackName: "string", bilingualOrder: "string", platforms: "string",
   formats: "string", genericMode: "boolean", customDomains: "string", youtubeStrategy: "string",
   youtubeUseAsr: "boolean", youtubeLive: "boolean", youtubePreferManual: "boolean", debug: "boolean", cacheEnabled: "boolean",
-  cacheTTL: "number"
+  cacheTTL: "number", cacheLimit: "number", batchChars: "number", batchItems: "number", translationConcurrency: "number"
 };
 
 GSS.normalizeSettings = function normalizeSettings(input) {
@@ -311,6 +311,7 @@ GSS.normalizeSettings = function normalizeSettings(input) {
   if (output.bilingualOrder && output.bilingualOrder !== "original-first") output.bilingualOrder = "translation-first";
   if (output.youtubeStrategy && output.youtubeStrategy !== "virtual") output.youtubeStrategy = "direct";
   if (output.source) output.source = GSS.Language ? GSS.Language.normalize(output.source) : String(output.source).toLowerCase();
+  if (output.translationConcurrency !== undefined) output.translationConcurrency = Math.max(1, Math.min(4, Math.floor(output.translationConcurrency)));
   return output;
 };
 
@@ -363,7 +364,7 @@ GSS.getConfig = function getConfig() {
 GSS.Logger = function Logger(config, scope) {
   var prefix = "[GSS " + GSS.VERSION + "][" + GSS.Runtime.name + "][" + scope + "]";
   function print(level, message, data) {
-    if (level === "DEBUG" && !config.debug) return;
+    if (!config.debug && (level === "DEBUG" || level === "INFO")) return;
     var suffix = "";
     if (data !== undefined) {
       try { suffix = " " + JSON.stringify(data); } catch (_) { suffix = " " + String(data); }
@@ -568,14 +569,22 @@ GSS.Platforms = (function createPlatformRegistry() {
     { id: "apple-fitness", name: "Apple Fitness+", maturity: "stable", test: function (host, path) { return /(^|\.)itunes\.apple\.com$/.test(host) && /\/hls\/workout\//.test(path); } },
     { id: "apple-tv-plus", name: "Apple TV+", maturity: "stable", test: function (host, path) { return /(^|\.)itunes\.apple\.com$/.test(host) && /\/hls\/subscription\//.test(path); } },
     { id: "apple-tv", name: "Apple TV", maturity: "stable", test: function (host) { return /(^|\.)itunes\.apple\.com$/.test(host) || /(^|\.)tv\.apple\.com$/.test(host); } },
-    { id: "max", name: "Max / HBO Max", maturity: "stable", test: function (host) { return /(^|\.)(max\.com|h264\.io|hbomaxcdn\.com|api\.hbo\.com)$/.test(host); } },
+    {
+      id: "discovery",
+      name: "Discovery+",
+      maturity: "stable",
+      test: function (host) {
+        if (/(^|\.)(uplynk\.com|disco-api\.com|discoveryplus\.com|discoveryplus\.co\.uk|discoveryplus\.in)$/.test(host)) return true;
+        return /(^|\.)(?:dplus|discovery)[-.]/.test(host) && /(^|\.)(?:h264\.io|akamaized\.net)$/.test(host);
+      }
+    },
+    { id: "max", name: "Max / HBO Max", maturity: "stable", test: function (host) { return /(^|\.)(max\.com|discomax\.com|h264\.io|hbomaxcdn\.com|api\.hbo\.com)$/.test(host); } },
     { id: "disney", name: "Disney+", maturity: "stable", test: function (host) { return /\.(media|prod)\.(dssott|starott|dssedge)\.com$/.test(host); } },
     { id: "prime", name: "Prime Video", maturity: "stable", test: function (host) { return /(\.hls\.(pv-cdn|row\.aiv-cdn)\.net$|avodhlss3ww-a\.akamaihd\.net$|^s3\.amazonaws\.com$|^cf-timedtext\.aux\.pv-cdn\.net$|^(d1v5ir2lpwr8os|d22qjgkvxw22r6|d25xi40x97liuc|d27xxe7juh1us6|dmqdd6hw24ucf)\.cloudfront\.net$)/.test(host); } },
     { id: "hulu", name: "Hulu", maturity: "stable", test: function (host) { return /(^|\.)(hulustream\.com|huluim\.com)$/.test(host) || host === "assetshuluimcom-a.akamaihd.net"; } },
     { id: "paramount-live", name: "Paramount+ Live TV", maturity: "experimental", test: function (host, path, url) { return /(^|\.)(pplus\.paramount\.tech|paramount\.tech|paramountplus\.com|cbsaavideo\.com|cbsivideo\.com|cbs\.com)$/.test(host) && /(live|linear|channel|station|stream|broadcast)/i.test(String(path || "") + " " + String(url || "")); } },
     { id: "paramount", name: "Paramount+", maturity: "stable", test: function (host) { return /(^|\.)(pplus\.paramount\.tech|paramount\.tech|paramountplus\.com|cbsaavideo\.com|cbsivideo\.com|cbs\.com)$/.test(host); } },
     { id: "peacock", name: "Peacock", maturity: "stable", test: function (host) { return /\.cdn\.peacocktv\.com$/.test(host); } },
-    { id: "discovery", name: "Discovery+", maturity: "stable", test: function (host) { return host === "content-discovery.uplynk.com" || /dplus-ph-/.test(host); } },
     { id: "fubo", name: "Fubo", maturity: "stable", test: function (host) { return /-vod\.fubo\.tv$/.test(host); } },
     { id: "ted", name: "TED", maturity: "stable", test: function (host) { return host === "hls.ted.com"; } },
     { id: "bbc", name: "BBC iPlayer", maturity: "experimental", test: function (host) { return /(^|\.)bbci\.co\.uk$/.test(host) || /^vod-.*-live\.akamaized\.net$/.test(host); } },
@@ -1084,16 +1093,27 @@ GSS.Providers.register("google-free", { name: "Google 免费兼容接口", kind:
 
   function translateMany(texts, source, target, callback) {
     if (!texts.length) { callback(null, []); return; }
-    var batches = makeBatches(texts), output = [], index = 0;
-    logger.info("translation started", { cues: texts.length, batches: batches.length, source: source, target: target });
-    function next() {
-      if (index >= batches.length) { callback(null, output); return; }
-      translateBatch(batches[index], source, target, function (error, translated) {
-        if (error) { callback(error); return; }
-        output = output.concat(translated); index += 1; next();
+    var batches = makeBatches(texts), output = new Array(batches.length), nextIndex = 0, completed = 0, stopped = false;
+    var concurrency = Math.max(1, Math.min(Number(config.translationConcurrency || 2), batches.length));
+    logger.info("translation started", { cues: texts.length, batches: batches.length, concurrency: concurrency, source: source, target: target });
+    function worker() {
+      if (stopped || nextIndex >= batches.length) return;
+      var current = nextIndex++;
+      translateBatch(batches[current], source, target, function (error, translated) {
+        if (stopped) return;
+        if (error) { stopped = true; callback(error); return; }
+        output[current] = translated;
+        completed += 1;
+        if (completed >= batches.length) {
+          var flattened = [];
+          output.forEach(function (batch) { flattened = flattened.concat(batch); });
+          callback(null, flattened);
+          return;
+        }
+        worker();
       });
     }
-    next();
+    for (var i = 0; i < concurrency; i += 1) worker();
   }
 
   return { ready: function () { return true; }, translateMany: translateMany };
@@ -1345,6 +1365,9 @@ GSS.M3U8 = (function createM3U8Tools() {
     set(attributes, "DEFAULT", "NO", false);
     set(attributes, "AUTOSELECT", "NO", false);
     set(attributes, "FORCED", "NO", false);
+    if (get(attributes, "STABLE-RENDITION-ID")) {
+      set(attributes, "STABLE-RENDITION-ID", "gss-" + GSS.Hash(absoluteOrigin + "|" + mode), true);
+    }
     set(attributes, "URI", GSS.Url.virtual(config.virtualOrigin, "/playlist", {
       origin: absoluteOrigin,
       mode: mode,

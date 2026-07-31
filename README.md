@@ -4,7 +4,7 @@
 
 项目通过 HTTPS MITM 读取播放器清单、播放器响应或文本字幕，在原有字幕菜单中加入一个可见的 **`Translate-zh`** 轨道。只有当用户选择该轨道后，模块才获取原字幕、调用翻译 Provider，并返回双语或纯翻译字幕。
 
-> 当前版本：**v0.5.0**  
+> 当前版本：**v0.5.2**
 > 支持系统：iOS、iPadOS、macOS、tvOS（具体能力取决于代理客户端与流媒体 App）  
 > 开源协议：MIT
 
@@ -139,7 +139,7 @@ gss.local
 
 | 平台 | 平台 ID | 当前处理范围 |
 |---|---|---|
-| Max / HBO Max | `max` | HLS + WebVTT |
+| Max / HBO Max | `max` | HLS/DASH、播放 JSON 与 WebVTT |
 | Apple TV | `apple-tv` | HLS + WebVTT |
 | Apple TV+ | `apple-tv-plus` | HLS + WebVTT |
 | Apple Fitness+ | `apple-fitness` | HLS workout 清单 + WebVTT |
@@ -148,7 +148,7 @@ gss.local
 | Hulu | `hulu` | HLS + WebVTT |
 | Paramount+ | `paramount` | HLS + WebVTT |
 | Peacock | `peacock` | HLS + WebVTT |
-| Discovery+ | `discovery` | HLS + WebVTT |
+| Discovery+ | `discovery` | Uplynk/H.264 CDN、HLS/DASH、播放 JSON 与 WebVTT |
 | Fubo | `fubo` | HLS + WebVTT |
 | TED | `ted` | HLS + WebVTT |
 
@@ -338,7 +338,8 @@ Shadowrocket 和 Surge 可以直接编辑常用模块参数。Loon 建议通过 
 
 - `cacheEnabled`：翻译缓存开关。
 - `cacheTTL`：缓存有效时间。
-- `debug`：调试日志开关。
+- `debug`：调试日志和运行诊断开关，默认关闭以减少持久化写入和控制台开销。
+- Google 免费接口会并行处理最多两个独立翻译批次，并保持原字幕顺序。
 
 ## 常用配置示例
 
@@ -532,6 +533,7 @@ http://gss.local/
 - 只启用需要的平台，例如 `platforms=max|youtube`。
 - 不要给视频 CDN（如 `*.googlevideo.com`）额外开启 MITM。
 - 关闭纯翻译轨，减少字幕菜单和请求数量。
+- Apple TV / Fitness+ 出现异常时，先更新模块并完全退出 App；新版本会为注入轨生成独立 `STABLE-RENDITION-ID`，并移除改写后失效的 ETag/Digest。
 
 #### 修改模块参数后没有变化
 
@@ -539,7 +541,7 @@ http://gss.local/
 
 ### 日志关键词
 
-调试时可以关注：
+先设置 `DEBUG=true`，再关注：
 
 ```text
 platform detected

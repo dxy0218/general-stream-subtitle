@@ -3,7 +3,7 @@
   var logger = GSS.Logger(config, "manifest");
 
   function record(platform, type, changed, details) {
-    if (!GSS.Diagnostics) return;
+    if (!config.debug || !GSS.Diagnostics) return;
     GSS.Diagnostics.record({
       scope: "manifest",
       url: GSS.Runtime.request.url || "",
@@ -33,7 +33,7 @@
       output = GSS.MPD.injectTrack(body, requestUrl, config, logger, platform);
       contentType = "application/dash+xml; charset=utf-8";
       record(platform, "dash", output !== body, {});
-    } else if (/^\s*[\[{]/.test(body) && /^(max|paramount|paramount-live)$/.test(platform.id)) {
+    } else if (/^\s*[\[{]/.test(body) && /^(max|discovery|paramount|paramount-live)$/.test(platform.id)) {
       var jsonResult = GSS.PlaybackJson.inject(body, requestUrl, config, logger, platform);
       output = jsonResult.body;
       contentType = "application/json; charset=utf-8";

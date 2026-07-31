@@ -29,7 +29,7 @@ test("Max playback JSON injects a virtual Translate-zh text track", () => {
   const { store, persistent } = storeRuntime(); let result;
   run("dist/manifest.js", {
     $request: { url: "https://play.max.com/playback/session?id=demo", headers: {} },
-    $response: { body, headers: { "Content-Type": "application/json", "Content-Length": "999" } },
+    $response: { body, headers: { "Content-Type": "application/json", "Content-Length": "999", ETag: '"stale"', Digest: "sha-256=stale" } },
     $persistentStore: persistent,
     $done(p) { result = p; }
   });
@@ -43,6 +43,45 @@ test("Max playback JSON injects a virtual Translate-zh text track", () => {
   assert.match(injected.url, /https:\/\/gss\.local\/subtitle\?/);
   assert.doesNotMatch(JSON.stringify([...store.entries()]), /private/);
   assert.equal(result.headers["Content-Length"], undefined);
+  assert.equal(result.headers.ETag, undefined);
+  assert.equal(result.headers.Digest, undefined);
+});
+
+test("Discovery+ playback JSON injects a virtual text track on current CDN hosts", () => {
+  const body = fs.readFileSync(path.join(root, "tests/fixtures/max-playback.json"), "utf8");
+  const { persistent } = storeRuntime(); let result;
+  run("dist/manifest.js", {
+    $request: { url: "https://content-ause1-ur-discovery1.uplynk.com/playback/session?id=demo", headers: {} },
+    $response: { body, headers: { "Content-Type": "application/json" } },
+    $persistentStore: persistent,
+    $done(p) { result = p; }
+  });
+  const parsed = JSON.parse(result.body);
+  assert.equal(parsed.playback.textTracks.length, 2);
+  assert.match(parsed.playback.textTracks[1].url, /gss\.local\/subtitle/);
+  assert.match(decodeURIComponent(parsed.playback.textTracks[1].url), /platform=discovery/);
+});
+
+test("Apple manifest rewrite preserves DRM and video routes while refreshing entity metadata", () => {
+  const body = [
+    "#EXTM3U",
+    '#EXT-X-SESSION-KEY:METHOD=SAMPLE-AES,URI="skd://license.example/key",KEYFORMAT="com.apple.streamingkeydelivery"',
+    '#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="English",LANGUAGE="en",DEFAULT=YES,AUTOSELECT=YES,STABLE-RENDITION-ID="apple.en",URI="subs/en.m3u8?token=signed"',
+    '#EXT-X-STREAM-INF:BANDWIDTH=2500000,SUBTITLES="subs"',
+    "video/main.m3u8?token=video-signed"
+  ].join("\n");
+  const { persistent } = storeRuntime(); let result;
+  run("dist/manifest.js", {
+    $request: { url: "https://play.itunes.apple.com/WebObjects/MZPlay.woa/hls/workout/master.m3u8", headers: {} },
+    $response: { body, headers: { "Content-Type": "application/vnd.apple.mpegurl", ETag: '"old"', "Content-MD5": "old" } },
+    $persistentStore: persistent,
+    $done(p) { result = p; }
+  });
+  assert.match(result.body, /skd:\/\/license\.example\/key/);
+  assert.match(result.body, /video\/main\.m3u8\?token=video-signed/);
+  assert.match(result.body, /NAME="Translate-zh"/);
+  assert.equal(result.headers.ETag, undefined);
+  assert.equal(result.headers["Content-MD5"], undefined);
 });
 
 test("Paramount+ Live TV master injects Translate-zh", () => {
@@ -64,6 +103,7 @@ test("diagnostics records sanitized playback inspection", () => {
   run("dist/manifest.js", {
     $request: { url: "https://play.max.com/playback/session?id=secret&token=private", headers: {} },
     $response: { body, headers: { "Content-Type": "application/json" } },
+    $argument: "debug=true",
     $persistentStore: persistent,
     $done(p) { result = p; }
   });
@@ -82,7 +122,24 @@ test("generated modules isolate Pluto and add Paramount Live rules", () => {
     assert.match(content, /GSS Pluto Master/);
     assert.match(content, /GSS Paramount Live Manifest/);
     assert.match(content, /GSS Paramount Playback/);
+    assert.match(content, /GSS Max Discovery Playback/);
+    assert.match(content, /discomax\\\.com/);
+    assert.match(content, /uplynk\\\.com/);
     assert.doesNotMatch(content, /hostname = .*\*\.pluto\.tv/);
     assert.match(content, /service-stitcher\.clusters\.pluto\.tv/);
   }
+});
+
+test("generated rules route Max and Discovery through one specialized handler", () => {
+  const content = fs.readFileSync(path.join(root, "modules", "GeneralStreamSubtitle.plugin"), "utf8");
+  const generalLine = content.split("\n").find((line) => line.includes("tag=GSS Manifest,"));
+  const warnerLine = content.split("\n").find((line) => line.includes("tag=GSS Max Discovery Playback,"));
+  const general = new RegExp(generalLine.slice("http-response ".length, generalLine.indexOf(" script-path=")));
+  const warner = new RegExp(warnerLine.slice("http-response ".length, warnerLine.indexOf(" script-path=")));
+  const maxUrl = "https://api.discomax.com/playback/session";
+  const discoveryUrl = "https://content-ause1-ur-discovery1.uplynk.com/asset/master.m3u8?token=x";
+  assert.equal(general.test(maxUrl), false);
+  assert.equal(general.test(discoveryUrl), false);
+  assert.equal(warner.test(maxUrl), true);
+  assert.equal(warner.test(discoveryUrl), true);
 });

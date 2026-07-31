@@ -95,16 +95,27 @@ GSS.Providers.register("google-free", { name: "Google 免费兼容接口", kind:
 
   function translateMany(texts, source, target, callback) {
     if (!texts.length) { callback(null, []); return; }
-    var batches = makeBatches(texts), output = [], index = 0;
-    logger.info("translation started", { cues: texts.length, batches: batches.length, source: source, target: target });
-    function next() {
-      if (index >= batches.length) { callback(null, output); return; }
-      translateBatch(batches[index], source, target, function (error, translated) {
-        if (error) { callback(error); return; }
-        output = output.concat(translated); index += 1; next();
+    var batches = makeBatches(texts), output = new Array(batches.length), nextIndex = 0, completed = 0, stopped = false;
+    var concurrency = Math.max(1, Math.min(Number(config.translationConcurrency || 2), batches.length));
+    logger.info("translation started", { cues: texts.length, batches: batches.length, concurrency: concurrency, source: source, target: target });
+    function worker() {
+      if (stopped || nextIndex >= batches.length) return;
+      var current = nextIndex++;
+      translateBatch(batches[current], source, target, function (error, translated) {
+        if (stopped) return;
+        if (error) { stopped = true; callback(error); return; }
+        output[current] = translated;
+        completed += 1;
+        if (completed >= batches.length) {
+          var flattened = [];
+          output.forEach(function (batch) { flattened = flattened.concat(batch); });
+          callback(null, flattened);
+          return;
+        }
+        worker();
       });
     }
-    next();
+    for (var i = 0; i < concurrency; i += 1) worker();
   }
 
   return { ready: function () { return true; }, translateMany: translateMany };
