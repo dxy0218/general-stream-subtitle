@@ -282,6 +282,23 @@ test("Shadowrocket exposes only native boolean switches", () => {
   assert.doesNotMatch(argumentLine, /SOURCE|TARGET|PROVIDER|PLATFORMS|FORMATS|ORDER/);
 });
 
+test("Shadowrocket Gateway GET routes do not require a request body", () => {
+  const content = fs.readFileSync(path.join(root, "modules", "GeneralStreamSubtitle.module"), "utf8");
+  const getLine = content.split("\n").find((line) => line.startsWith("GSS Gateway ="));
+  const saveLine = content.split("\n").find((line) => line.startsWith("GSS Gateway Save ="));
+  const patternOf = (line) => new RegExp(line.slice(line.indexOf("pattern=") + 8, line.indexOf(", requires-body=")));
+  const getPattern = patternOf(getLine);
+  const savePattern = patternOf(saveLine);
+  assert.match(getLine, /requires-body=0/);
+  assert.match(saveLine, /requires-body=1/);
+  assert.equal(getPattern.test("http://gss.local/"), true);
+  assert.equal(getPattern.test("http://gss.local/health"), true);
+  assert.equal(getPattern.test("http://gss.local/subtitle?origin=https%3A%2F%2Fexample.com%2Fa.vtt"), true);
+  assert.equal(getPattern.test("http://gss.local/save"), false);
+  assert.equal(savePattern.test("http://gss.local/save"), true);
+  assert.equal(savePattern.test("http://gss.local/health"), false);
+});
+
 test("generated rules match media manifests and bypass account, session, GraphQL and DRM URLs", () => {
   const content = fs.readFileSync(path.join(root, "modules", "GeneralStreamSubtitle.plugin"), "utf8");
   const generalLine = content.split("\n").find((line) => line.includes("tag=GSS Manifest,"));

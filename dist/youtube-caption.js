@@ -1,4 +1,4 @@
-// General Stream Subtitle 0.6.2 - youtube-caption
+// General Stream Subtitle 0.6.3 - youtube-caption
 // MIT License - generated file; edit src/ instead.
 (function () {
 "use strict";
@@ -230,7 +230,7 @@ GSS.Language = (function createLanguageTools() {
   };
 })();
 
-GSS.VERSION = "0.6.2";
+GSS.VERSION = "0.6.3";
 GSS.SETTINGS_KEY = "GSS_SETTINGS_V4";
 GSS.PROVIDER_SECRETS_KEY = "GSS_PROVIDER_SECRETS_V1";
 GSS.ADMIN_TOKEN_KEY = "GSS_ADMIN_TOKEN_V1";

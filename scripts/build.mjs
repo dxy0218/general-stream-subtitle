@@ -39,7 +39,8 @@ const paramountPlaybackPattern = String.raw`^https?:\/\/(?:[^\/]+\.)*(?:pplus\.p
 // Only media delivery hosts and explicit manifest files are inspected. App,
 // account, playback-session, GraphQL and DRM endpoints stay outside the rule.
 const warnerMediaPattern = String.raw`^https?:\/\/(?:(?:[^\/]+\.)*(?:prod\.media\.max\.com|prd\.media\.max\.com|prod\.media\.h264\.io|prd\.media\.h264\.io|hbomaxcdn\.com)|manifests(?:\.v2)?\.api\.hbo\.com|[^\/.]*discovery[^\/.]*\.uplynk\.com|(?:dplus|discovery)[^\/.]*\.(?:h264\.io|akamaized\.net))\/.*\.(?:m3u8|mpd)(?:\?.*)?$`;
-const gatewayPattern = String.raw`^https?:\/\/(?:gss\.local|127\.0\.0\.1(?::6170)?|localhost(?::6170)?)\/.*`;
+const gatewayGetPattern = String.raw`^https?:\/\/(?:gss\.local|127\.0\.0\.1(?::6170)?|localhost(?::6170)?)\/(?!save(?:[\/?#]|$)).*`;
+const gatewaySavePattern = String.raw`^https?:\/\/(?:gss\.local|127\.0\.0\.1(?::6170)?|localhost(?::6170)?)\/save(?:\?.*)?$`;
 const youtubePlayerPattern = String.raw`^https?:\/\/(?:www\.youtube\.com|m\.youtube\.com|music\.youtube\.com|tv\.youtube\.com|youtubei\.googleapis\.com)\/youtubei\/v1\/player(?:\?.*)?$`;
 const youtubeCaptionPattern = String.raw`^https?:\/\/(?:www\.youtube\.com|m\.youtube\.com|music\.youtube\.com|tv\.youtube\.com)\/api\/timedtext\?.*(?:gss_mode|gss_v)=.*`;
 const mitmHosts = [
@@ -115,7 +116,8 @@ GSS Prime Video HLS = type=http-response, pattern=${primeHlsPattern}, requires-b
 GSS Hulu HLS = type=http-response, pattern=${huluHlsPattern}, requires-body=1, max-size=4194304, timeout=20, script-path=${manifestUrl}, argument=${surgeArgs}
 GSS Paramount Live Manifest = type=http-response, pattern=${paramountManifestPattern}, requires-body=1, max-size=4194304, timeout=20, script-path=${manifestUrl}, argument=${surgeArgs}
 GSS Paramount Playback = type=http-response, pattern=${paramountPlaybackPattern}, requires-body=1, max-size=4194304, timeout=25, script-path=${manifestUrl}, argument=${surgeArgs}
-GSS Gateway = type=http-request, pattern=${gatewayPattern}, requires-body=1, timeout=90, script-path=${gatewayUrl}, argument=${surgeArgs}
+GSS Gateway = type=http-request, pattern=${gatewayGetPattern}, requires-body=0, timeout=90, script-path=${gatewayUrl}, argument=${surgeArgs}
+GSS Gateway Save = type=http-request, pattern=${gatewaySavePattern}, requires-body=1, timeout=90, script-path=${gatewayUrl}, argument=${surgeArgs}
 GSS YouTube Player = type=http-response, pattern=${youtubePlayerPattern}, requires-body=1, max-size=4194304, timeout=30, script-path=${youtubeUrl}, argument=${surgeArgs}
 GSS YouTube Caption = type=http-response, pattern=${youtubeCaptionPattern}, requires-body=1, max-size=4194304, timeout=90, script-path=${youtubeCaptionUrl}, argument=${surgeArgs}
 
@@ -135,7 +137,8 @@ http-response ${primeHlsPattern} script-path=${manifestUrl}, timeout=20, require
 http-response ${huluHlsPattern} script-path=${manifestUrl}, timeout=20, requires-body=true, argument=${defaultArgs}, tag=GSS Hulu HLS, enable=true
 http-response ${paramountManifestPattern} script-path=${manifestUrl}, timeout=20, requires-body=true, argument=${defaultArgs}, tag=GSS Paramount Live Manifest, enable=true
 http-response ${paramountPlaybackPattern} script-path=${manifestUrl}, timeout=25, requires-body=true, argument=${defaultArgs}, tag=GSS Paramount Playback, enable=true
-http-request ${gatewayPattern} script-path=${gatewayUrl}, timeout=90, requires-body=true, argument=${defaultArgs}, tag=GSS Gateway, enable=true
+http-request ${gatewayGetPattern} script-path=${gatewayUrl}, timeout=90, requires-body=false, argument=${defaultArgs}, tag=GSS Gateway, enable=true
+http-request ${gatewaySavePattern} script-path=${gatewayUrl}, timeout=90, requires-body=true, argument=${defaultArgs}, tag=GSS Gateway Save, enable=true
 http-response ${youtubePlayerPattern} script-path=${youtubeUrl}, timeout=30, requires-body=true, argument=${defaultArgs}, tag=GSS YouTube Player, enable=true
 http-response ${youtubeCaptionPattern} script-path=${youtubeCaptionUrl}, timeout=90, requires-body=true, argument=${defaultArgs}, tag=GSS YouTube Caption, enable=true
 
@@ -154,7 +157,8 @@ GSS Max Discovery Media = type=http-response, pattern=${warnerMediaPattern}, req
 GSS Pluto Master = type=http-response, pattern=${plutoMasterPattern}, requires-body=1, max-size=4194304, timeout=20, script-path=${manifestUrl}, argument=${shadowArgs}
 GSS Prime Video HLS = type=http-response, pattern=${primeHlsPattern}, requires-body=1, max-size=4194304, timeout=20, script-path=${manifestUrl}, argument=${shadowArgs}
 GSS Hulu HLS = type=http-response, pattern=${huluHlsPattern}, requires-body=1, max-size=4194304, timeout=20, script-path=${manifestUrl}, argument=${shadowArgs}
-GSS Gateway = type=http-request, pattern=${gatewayPattern}, requires-body=1, timeout=90, script-path=${gatewayUrl}, argument=${shadowArgs}
+GSS Gateway = type=http-request, pattern=${gatewayGetPattern}, requires-body=0, timeout=90, script-path=${gatewayUrl}, argument=${shadowArgs}
+GSS Gateway Save = type=http-request, pattern=${gatewaySavePattern}, requires-body=1, timeout=90, script-path=${gatewayUrl}, argument=${shadowArgs}
 GSS YouTube Player = type=http-response, pattern=${youtubePlayerPattern}, requires-body=1, max-size=4194304, timeout=30, script-path=${youtubeUrl}, argument=${shadowArgs}
 GSS YouTube Caption = type=http-response, pattern=${youtubeCaptionPattern}, requires-body=1, max-size=4194304, timeout=90, script-path=${youtubeCaptionUrl}, argument=${shadowArgs}
 

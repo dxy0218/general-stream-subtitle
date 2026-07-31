@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.6.3
+
+- Split the virtual Gateway into bodyless GET and body-reading settings-save request rules.
+- Prevent Shadowrocket from waiting for a nonexistent request body when opening `gss.local`, `/health`, logs, or virtual subtitle URLs.
+- Keep API Key form submission on the dedicated body-reading POST route.
+
 ## 0.6.2
 
 - Add a native Shadowrocket `HY_MT2` switch for a private OpenAI-compatible Hy-MT2 translation service.
