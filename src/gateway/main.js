@@ -4,6 +4,24 @@
   var requestUrl = GSS.Runtime.request.url || "";
   var path = GSS.Url.path(requestUrl);
   var host = GSS.Url.host(requestUrl);
+  var requestId = GSS.Diagnostics ? GSS.Diagnostics.requestId() : "";
+  var currentPlatform = "unknown";
+
+  function trace(type, status, details, level, url) {
+    if (!config.logEnabled || !GSS.Diagnostics) return;
+    GSS.Diagnostics.record({
+      requestId: requestId,
+      scope: "gateway",
+      platform: currentPlatform,
+      type: type,
+      level: level || "info",
+      status: status || "observed",
+      group: currentPlatform + "|" + type + "|" + path,
+      throttleSeconds: !level || level === "info" ? 15 : 0,
+      url: url || requestUrl,
+      details: details || {}
+    });
+  }
 
   function upstreamHeaders(response) { return (response && response.headers) || {}; }
   function headerValue(headers, name) {
@@ -12,6 +30,7 @@
     return value;
   }
   function emptyResponse(reason, format, origin) {
+    trace("empty-response", "fallback", { reason: reason, format: format ? format.id : "unknown" }, "error", origin || requestUrl);
     logger.error(reason + "; returning an empty virtual response");
     if (path === "/playlist") { GSS.Runtime.doneResponse(200, { "Content-Type": "application/vnd.apple.mpegurl; charset=utf-8", "Cache-Control": "no-store" }, "#EXTM3U\n#EXT-X-ENDLIST\n"); return; }
     if (path === "/youtube" && /(?:[?&]fmt=json3|\.json(?:$|[?#]))/i.test(String(origin || ""))) { GSS.Runtime.doneResponse(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" }, '{"events":[]}'); return; }
@@ -44,6 +63,7 @@
     return headers;
   }
   function originalResponse(reason, body, response, upstreamType) {
+    trace("original-subtitle-fallback", "fallback", { reason: reason, contentType: upstreamType || "unknown", bodySize: String(body || "").length }, "warn", origin || requestUrl);
     logger.warn(reason + "; returning the original subtitle body", { fallback: "original", contentType: upstreamType || "unknown" });
     var status = response && (response.status || response.statusCode) || 200;
     GSS.Runtime.doneResponse(status, GSS.Runtime.cleanHeaders(upstreamHeaders(response), upstreamType || undefined), body);
@@ -67,15 +87,20 @@
     var source = query.source || config.source;
     var target = query.target || config.target;
     var platform = query.platform || "unknown";
+    currentPlatform = platform;
     if (!origin) { emptyResponse("missing origin URL", null, origin); return; }
     if (path === "/youtube") origin = forwardedOrigin(origin, query);
+
+    trace("subtitle-request", "started", { route: path, mode: mode, source: source, target: target }, "info", origin);
 
     GSS.Runtime.httpGet({ url: origin, headers: upstreamRequestHeaders(platform) }, function (error, body, response) {
       if (error) { emptyResponse("upstream fetch failed: " + String(error), null, origin); return; }
       try {
         var upstreamType = headerValue(upstreamHeaders(response), "content-type");
+        trace("upstream-response", "received", { status: response && (response.status || response.statusCode) || 200, contentType: upstreamType || "unknown", bodySize: String(body || "").length }, "info", origin);
         if (path === "/playlist" && body.indexOf("#EXTM3U") >= 0) {
           var playlist = GSS.M3U8.decorateSubtitlePlaylist(body, origin, mode, source, target, config, logger, platform);
+          trace("subtitle-playlist", playlist === body ? "unchanged" : "rewritten", { bodySize: String(body).length }, "info", origin);
           GSS.Runtime.doneResponse(200, GSS.Runtime.cleanHeaders(upstreamHeaders(response), "application/vnd.apple.mpegurl; charset=utf-8"), playlist);
           return;
         }
@@ -85,6 +110,7 @@
           GSS.Subtitle.translateBody(body, origin, upstreamType, mode, source, target, config, logger, function (translateError, translated, changed, format) {
             if (translateError) { originalResponse("translation failed: " + String(translateError), body, response, upstreamType); return; }
             var contentType = format.contentTypeFor ? format.contentTypeFor(translated, upstreamType) : format.contentType;
+            trace("subtitle-translation", changed ? "rewritten" : "unchanged", { format: format.id, mode: mode, source: source, target: target, inputSize: String(body).length, outputSize: String(translated).length }, "info", origin);
             GSS.Runtime.doneResponse(200, GSS.Runtime.cleanHeaders(upstreamHeaders(response), contentType), translated);
           });
           return;

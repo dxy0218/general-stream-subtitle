@@ -1,4 +1,4 @@
-// General Stream Subtitle 0.6.0 - gateway
+// General Stream Subtitle 0.6.1 - gateway
 // MIT License - generated file; edit src/ instead.
 (function () {
 "use strict";
@@ -230,7 +230,7 @@ GSS.Language = (function createLanguageTools() {
   };
 })();
 
-GSS.VERSION = "0.6.0";
+GSS.VERSION = "0.6.1";
 GSS.SETTINGS_KEY = "GSS_SETTINGS_V4";
 GSS.PROVIDER_SECRETS_KEY = "GSS_PROVIDER_SECRETS_V1";
 GSS.ADMIN_TOKEN_KEY = "GSS_ADMIN_TOKEN_V1";
@@ -270,6 +270,7 @@ GSS.DEFAULTS = {
   youtubeUseAsr: true,
   youtubeLive: true,
   youtubePreferManual: true,
+  logEnabled: true,
   debug: false,
   cacheEnabled: true,
   cacheTTL: 6 * 60 * 60 * 1000,
@@ -307,7 +308,7 @@ GSS.allowedSettings = {
   safePlayback: "boolean", presetMode: "boolean", platformDiscovery: "boolean", discoveryHlsOnly: "boolean",
   platformMax: "boolean", platformPluto: "boolean", platformPrime: "boolean", platformHulu: "boolean", platformYoutube: "boolean",
   formats: "string", genericMode: "boolean", customDomains: "string", youtubeStrategy: "string",
-  youtubeUseAsr: "boolean", youtubeLive: "boolean", youtubePreferManual: "boolean", debug: "boolean", cacheEnabled: "boolean",
+  youtubeUseAsr: "boolean", youtubeLive: "boolean", youtubePreferManual: "boolean", logEnabled: "boolean", debug: "boolean", cacheEnabled: "boolean",
   cacheTTL: "number", cacheLimit: "number", batchChars: "number", batchItems: "number", translationConcurrency: "number"
 };
 
@@ -396,6 +397,7 @@ GSS.getConfig = function getConfig() {
     config.injectTranslated = !!args.injectTranslated;
     config.bilingualOrder = "translation-first";
     config.cacheEnabled = args.cacheEnabled !== false;
+    config.logEnabled = args.logEnabled !== false;
     config.debug = !!args.debug;
     config.safePlayback = true;
     config.presetMode = true;
@@ -412,13 +414,28 @@ GSS.getConfig = function getConfig() {
 
 GSS.Logger = function Logger(config, scope) {
   var prefix = "[GSS " + GSS.VERSION + "][" + GSS.Runtime.name + "][" + scope + "]";
-  function print(level, message, data) {
+  function persist(level, message, data) {
+    if (!config.logEnabled || !GSS.Diagnostics) return;
     if (!config.debug && (level === "DEBUG" || level === "INFO")) return;
+    GSS.Diagnostics.record({
+      scope: scope,
+      type: "runtime-log",
+      level: level.toLowerCase(),
+      status: level === "ERROR" ? "failed" : level === "WARN" ? "warning" : "observed",
+      message: message,
+      details: data
+    });
+  }
+  function print(level, message, data) {
+    persist(level, message, data);
+    if (!config.debug && (level === "DEBUG" || level === "INFO")) return;
+    var safeMessage = GSS.Diagnostics && GSS.Diagnostics.sanitize ? GSS.Diagnostics.sanitize(message) : message;
+    var safeData = GSS.Diagnostics && GSS.Diagnostics.sanitize ? GSS.Diagnostics.sanitize(data) : data;
     var suffix = "";
-    if (data !== undefined) {
-      try { suffix = " " + JSON.stringify(data); } catch (_) { suffix = " " + String(data); }
+    if (safeData !== undefined) {
+      try { suffix = " " + JSON.stringify(safeData); } catch (_) { suffix = " " + String(safeData); }
     }
-    console.log(prefix + "[" + level + "] " + message + suffix);
+    console.log(prefix + "[" + level + "] " + safeMessage + suffix);
   }
   return {
     debug: function (message, data) { print("DEBUG", message, data); },
@@ -527,7 +544,8 @@ GSS.Url = {
 
 GSS.Diagnostics = (function createDiagnostics() {
   var KEY = "GSS_DIAGNOSTICS_V1";
-  var LIMIT = 30;
+  var LIMIT = 80;
+  var MAX_BYTES = 120000;
 
   function readAll() {
     try {
@@ -543,22 +561,49 @@ GSS.Diagnostics = (function createDiagnostics() {
     return host ? "https://" + host + path : String(url || "").split("?")[0].slice(0, 220);
   }
 
+  function cleanString(value) {
+    var output = String(value || "");
+    output = output.replace(/https?:\/\/[^\s"'<>]+/gi, function (match) { return safeUrl(match); });
+    output = output.replace(/(bearer\s+)[a-z0-9._~+\/-]+=*/gi, "$1[REDACTED]");
+    output = output.replace(/\beyJ[a-z0-9_-]+\.[a-z0-9_-]+\.[a-z0-9_-]+\b/gi, "[REDACTED_JWT]");
+    output = output.replace(/\b(token|authorization|cookie|signature|policy|api[_-]?key|x-amz-[a-z0-9-]+)\s*[:=]\s*[^,\s;&]+/gi, "$1=[REDACTED]");
+    return output.length > 320 ? output.slice(0, 317) + "..." : output;
+  }
+
   function cleanValue(value, depth) {
-    if (depth > 3) return undefined;
+    if (depth > 4) return undefined;
     if (value === null || value === undefined) return value;
-    if (typeof value === "string") return value.length > 240 ? value.slice(0, 237) + "..." : value;
+    if (typeof value === "string") return cleanString(value);
     if (typeof value === "number" || typeof value === "boolean") return value;
-    if (Array.isArray(value)) return value.slice(0, 12).map(function (item) { return cleanValue(item, depth + 1); });
+    if (Array.isArray(value)) return value.slice(0, 16).map(function (item) { return cleanValue(item, depth + 1); });
     if (typeof value === "object") {
       var output = {};
-      Object.keys(value).slice(0, 20).forEach(function (key) {
-        if (/token|authorization|cookie|signature|policy|key/i.test(key)) return;
+      Object.keys(value).slice(0, 24).forEach(function (key) {
+        if (/token|authorization|cookie|signature|policy|secret|password|api.?key/i.test(key)) return;
         var cleaned = cleanValue(value[key], depth + 1);
         if (cleaned !== undefined) output[key] = cleaned;
       });
       return output;
     }
-    return String(value);
+    return cleanString(value);
+  }
+
+  function requestId() {
+    return Date.now().toString(36) + "-" + Math.floor(Math.random() * 1679616).toString(36);
+  }
+
+  function fingerprint(row) {
+    return [row.scope || "", row.platform || "", row.type || "", row.level || "", row.status || "", row.group || row.url || ""].join("|");
+  }
+
+  function trimToBudget(rows) {
+    if (rows.length > LIMIT) rows.length = LIMIT;
+    var serialized = JSON.stringify(rows);
+    while (serialized.length > MAX_BYTES && rows.length > 1) {
+      rows.pop();
+      serialized = JSON.stringify(rows);
+    }
+    return serialized;
   }
 
   function record(event) {
@@ -566,17 +611,49 @@ GSS.Diagnostics = (function createDiagnostics() {
       var rows = readAll();
       var row = cleanValue(event || {}, 0) || {};
       row.time = new Date().toISOString();
+      row.runtime = row.runtime || GSS.Runtime.name;
+      row.requestId = row.requestId || requestId();
+      row.level = String(row.level || "info").toLowerCase();
+      row.status = row.status || "observed";
       if (row.url) row.url = safeUrl(row.url);
-      rows.unshift(row);
-      if (rows.length > LIMIT) rows.length = LIMIT;
-      GSS.Runtime.write(JSON.stringify(rows), KEY);
+      var throttleMs = Math.max(0, Number(row.throttleSeconds || 0)) * 1000;
+      delete row.throttleSeconds;
+      if (throttleMs) {
+        var rowFingerprint = fingerprint(row);
+        for (var i = 0; i < rows.length; i += 1) {
+          if (fingerprint(rows[i]) === rowFingerprint && Date.parse(row.time) - Date.parse(rows[i].lastTime || rows[i].time) < throttleMs) return;
+        }
+      }
+      var latest = rows[0];
+      var now = Date.parse(row.time);
+      if (latest && fingerprint(latest) === fingerprint(row) && now - Date.parse(latest.lastTime || latest.time) < 60000) {
+        row.firstTime = latest.firstTime || latest.time;
+        row.count = Number(latest.count || 1) + 1;
+        row.lastTime = row.time;
+        rows[0] = row;
+      } else {
+        row.count = 1;
+        rows.unshift(row);
+      }
+      GSS.Runtime.write(trimToBudget(rows), KEY);
     } catch (_) {}
   }
 
   function list() { return readAll(); }
   function clear() { return GSS.Runtime.write("[]", KEY); }
+  function sanitize(value) { return cleanValue(value, 0); }
+  function summary() {
+    var rows = readAll(), output = { total: rows.length, errors: 0, warnings: 0, rewritten: 0, bypassed: 0 };
+    rows.forEach(function (row) {
+      if (row.level === "error") output.errors += 1;
+      if (row.level === "warn" || row.level === "warning") output.warnings += 1;
+      if (row.status === "rewritten" || row.changed === true) output.rewritten += 1;
+      if (row.status === "bypassed" || row.status === "fallback") output.bypassed += 1;
+    });
+    return output;
+  }
 
-  return { record: record, list: list, clear: clear, key: KEY };
+  return { record: record, list: list, clear: clear, summary: summary, sanitize: sanitize, requestId: requestId, safeUrl: safeUrl, key: KEY };
 })();
 
 GSS.Formats = (function createFormatRegistry() {
@@ -1591,6 +1668,38 @@ GSS.Admin = (function createAdmin() {
     }
     return output;
   }
+  function logsPayload() {
+    return {
+      version: GSS.VERSION,
+      runtime: GSS.Runtime.name,
+      summary: GSS.Diagnostics ? GSS.Diagnostics.summary() : { total: 0, errors: 0, warnings: 0, rewritten: 0, bypassed: 0 },
+      records: GSS.Diagnostics ? GSS.Diagnostics.list() : []
+    };
+  }
+  function logsPage(token, message) {
+    var payload = logsPayload(), rows = payload.records;
+    var rowsHtml = rows.map(function (row) {
+      var primary = row.message || row.error || row.details && row.details.reason || "";
+      var details = JSON.stringify(row, null, 2);
+      return '<tr><td class="time">' + escapeHtml(row.time || "") + (row.count > 1 ? '<br><span class="count">×' + escapeHtml(row.count) + '</span>' : '') + '</td>'
+        + '<td><span class="level ' + escapeHtml(row.level || "info") + '">' + escapeHtml(row.level || "info") + '</span></td>'
+        + '<td>' + escapeHtml(row.platform || "-") + '<br><span class="scope">' + escapeHtml(row.scope || "-") + '</span></td>'
+        + '<td><strong>' + escapeHtml(row.type || "event") + '</strong><br><span class="status">' + escapeHtml(row.status || "observed") + '</span></td>'
+        + '<td><div class="url">' + escapeHtml(row.url || "") + '</div><div>' + escapeHtml(primary) + '</div><details><summary>详细信息</summary><pre>' + escapeHtml(details) + '</pre></details></td></tr>';
+    }).join("");
+    if (!rowsHtml) rowsHtml = '<tr><td colspan="5" class="empty">暂无日志。请保持 LOGS 开启，然后重现一次播放或字幕错误。</td></tr>';
+    var raw = JSON.stringify(payload, null, 2);
+    var html = '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+      + '<title>GSS 运行日志</title><style>body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;margin:0;background:#f5f5f7;color:#1d1d1f}main{max-width:1180px;margin:24px auto;padding:0 14px}.card{background:#fff;border-radius:16px;padding:18px;box-shadow:0 6px 24px rgba(0,0,0,.07);margin-bottom:14px}.summary{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}.metric{background:#f5f5f7;border-radius:12px;padding:12px}.metric b{display:block;font-size:22px}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}button,a.button{border:0;border-radius:9px;padding:10px 13px;background:#0071e3;color:#fff;text-decoration:none;font-size:14px}.danger{background:#c9342f!important}.muted,.scope,.status,.url,.count{color:#6e6e73;font-size:12px}.notice{background:#e8f8ed;padding:10px;border-radius:10px}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:10px 8px;border-bottom:1px solid #e5e5ea;text-align:left;vertical-align:top}th{position:sticky;top:0;background:#fff}.time{white-space:nowrap}.level{font-size:11px;padding:3px 6px;border-radius:6px;background:#e8e8ed}.level.error{background:#ffe8e7;color:#b42318}.level.warn,.level.warning{background:#fff4ce;color:#7a4d00}.url{word-break:break-all;margin-bottom:4px}details{margin-top:6px}pre{white-space:pre-wrap;word-break:break-word;background:#f5f5f7;padding:9px;border-radius:8px;max-width:700px}textarea{box-sizing:border-box;width:100%;height:190px;margin-top:10px;font-family:ui-monospace,monospace;font-size:12px}.empty{text-align:center;padding:30px}.table-wrap{overflow:auto}@media(max-width:700px){.summary{grid-template-columns:repeat(2,1fr)}th:nth-child(1),td:nth-child(1){display:none}}</style></head><body><main>'
+      + '<div class="card"><h1>GSS 运行日志</h1><p class="muted">v' + escapeHtml(GSS.VERSION) + ' · ' + escapeHtml(GSS.Runtime.name) + ' · 最多保留 80 条脱敏记录。URL 查询参数、Token、Cookie、Authorization、签名和 API Key 不会写入日志。</p>'
+      + (message ? '<p class="notice">' + escapeHtml(message) + '</p>' : '')
+      + '<div class="summary"><div class="metric"><b>' + escapeHtml(payload.summary.total) + '</b>当前记录</div><div class="metric"><b>' + escapeHtml(payload.summary.errors) + '</b>错误</div><div class="metric"><b>' + escapeHtml(payload.summary.warnings) + '</b>警告</div><div class="metric"><b>' + escapeHtml(payload.summary.rewritten) + '</b>已改写</div><div class="metric"><b>' + escapeHtml(payload.summary.bypassed) + '</b>放行/回退</div></div>'
+      + '<div class="actions"><a class="button" href="/">返回设置</a><a class="button" href="/logs">刷新</a><a class="button" href="/logs.json">查看 JSON</a><button type="button" onclick="navigator.clipboard&&navigator.clipboard.writeText(document.getElementById(\'raw-logs\').value)">复制全部日志</button><a class="button danger" href="/clear-diagnostics?view=logs&amp;token=' + escapeHtml(token) + '">清空日志</a></div></div>'
+      + '<div class="card table-wrap"><table><thead><tr><th>时间</th><th>级别</th><th>平台/范围</th><th>阶段/结果</th><th>地址与信息</th></tr></thead><tbody>' + rowsHtml + '</tbody></table></div>'
+      + '<div class="card"><details><summary>用于提交 Issue 的脱敏 JSON</summary><textarea id="raw-logs" readonly>' + escapeHtml(raw) + '</textarea></details></div>'
+      + '</main></body></html>';
+    GSS.Runtime.doneResponse(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" }, html);
+  }
   function page(config, token, message) {
     var keyState = GSS.providerHasKey(config.provider) ? "当前引擎已保存 API Key；留空表示保持不变。" : "当前引擎尚未保存 API Key。";
     var html = '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
@@ -1620,16 +1729,18 @@ GSS.Admin = (function createAdmin() {
       + '<h2>运行</h2><label class="check"><input type="checkbox" name="enabled" value="true"' + checked(config.enabled) + '>启用字幕注入</label>'
       + '<label class="check"><input type="checkbox" name="injectTranslated" value="true"' + checked(config.injectTranslated) + '>额外显示纯翻译轨</label>'
       + '<label class="check"><input type="checkbox" name="cacheEnabled" value="true"' + checked(config.cacheEnabled) + '>启用翻译缓存</label>'
-      + '<label class="check"><input type="checkbox" name="debug" value="true"' + checked(config.debug) + '>启用调试日志</label>'
-      + '<div class="actions"><button type="submit">保存设置</button><a class="button" href="/reset?token=' + escapeHtml(token) + '">恢复默认</a><a class="button" href="/health">运行状态</a><a class="button" href="/diagnostics">诊断记录</a></div></form>'
+      + '<label class="check"><input type="checkbox" name="logEnabled" value="true"' + checked(config.logEnabled) + '>记录脱敏运行日志（推荐）</label>'
+      + '<label class="check"><input type="checkbox" name="debug" value="true"' + checked(config.debug) + '>控制台详细调试输出</label>'
+      + '<div class="actions"><button type="submit">保存设置</button><a class="button" href="/reset?token=' + escapeHtml(token) + '">恢复默认</a><a class="button" href="/health">运行状态</a><a class="button" href="/logs">运行日志</a></div></form>'
       + '<p class="muted">保存后请完全退出并重新打开流媒体 App。此页面由代理脚本合成，不是常驻 Web 服务。</p></main></body></html>';
     GSS.Runtime.doneResponse(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" }, html);
   }
   function handle(url, config, logger) {
     var path = GSS.Url.path(url), query = params(url), token = GSS.getAdminToken();
-    if (path === "/health") { json(200, { ok: true, version: GSS.VERSION, runtime: GSS.Runtime.name, providers: GSS.Providers.list(), formats: GSS.Formats.list(), platforms: GSS.Platforms.list(), config: publicConfig(config), diagnosticsCount: GSS.Diagnostics ? GSS.Diagnostics.list().length : 0 }); return true; }
-    if (path === "/diagnostics") { json(200, { version: GSS.VERSION, runtime: GSS.Runtime.name, records: GSS.Diagnostics ? GSS.Diagnostics.list() : [] }); return true; }
-    if (path === "/clear-diagnostics") { if (query.token !== token) { json(403, { ok: false, error: "invalid admin token" }); return true; } if (GSS.Diagnostics) GSS.Diagnostics.clear(); json(200, { ok: true, cleared: true }); return true; }
+    if (path === "/health") { var diagnosticSummary = GSS.Diagnostics ? GSS.Diagnostics.summary() : { total: 0 }; json(200, { ok: true, version: GSS.VERSION, runtime: GSS.Runtime.name, providers: GSS.Providers.list(), formats: GSS.Formats.list(), platforms: GSS.Platforms.list(), config: publicConfig(config), diagnosticsCount: diagnosticSummary.total, diagnostics: diagnosticSummary }); return true; }
+    if (path === "/logs") { logsPage(token, ""); return true; }
+    if (path === "/logs.json" || path === "/diagnostics") { json(200, logsPayload()); return true; }
+    if (path === "/clear-diagnostics") { if (query.token !== token) { json(403, { ok: false, error: "invalid admin token" }); return true; } if (GSS.Diagnostics) GSS.Diagnostics.clear(); if (query.view === "logs") logsPage(token, "日志已清空。"); else json(200, { ok: true, cleared: true }); return true; }
     if (path === "/api/config") { json(200, { version: GSS.VERSION, providers: GSS.Providers.list(), formats: GSS.Formats.list(), platforms: GSS.Platforms.list(), config: publicConfig(config) }); return true; }
     if (path === "/save") {
       if (query.token !== token) { json(403, { ok: false, error: "invalid admin token" }); return true; }
@@ -1647,7 +1758,7 @@ GSS.Admin = (function createAdmin() {
         youtubeStrategy: query.youtubeStrategy, youtubeUseAsr: query.youtubeUseAsr === "true",
         youtubeLive: query.youtubeLive === "true", youtubePreferManual: query.youtubePreferManual === "true",
         enabled: query.enabled === "true", injectTranslated: query.injectTranslated === "true",
-        cacheEnabled: query.cacheEnabled === "true", debug: query.debug === "true"
+        cacheEnabled: query.cacheEnabled === "true", logEnabled: query.logEnabled === "true", debug: query.debug === "true"
       };
       GSS.saveSettings(values);
       if (query.clearProviderKey === "true") GSS.saveProviderSecret(query.provider, "apiKey", "");
@@ -1672,6 +1783,24 @@ GSS.Admin = (function createAdmin() {
   var requestUrl = GSS.Runtime.request.url || "";
   var path = GSS.Url.path(requestUrl);
   var host = GSS.Url.host(requestUrl);
+  var requestId = GSS.Diagnostics ? GSS.Diagnostics.requestId() : "";
+  var currentPlatform = "unknown";
+
+  function trace(type, status, details, level, url) {
+    if (!config.logEnabled || !GSS.Diagnostics) return;
+    GSS.Diagnostics.record({
+      requestId: requestId,
+      scope: "gateway",
+      platform: currentPlatform,
+      type: type,
+      level: level || "info",
+      status: status || "observed",
+      group: currentPlatform + "|" + type + "|" + path,
+      throttleSeconds: !level || level === "info" ? 15 : 0,
+      url: url || requestUrl,
+      details: details || {}
+    });
+  }
 
   function upstreamHeaders(response) { return (response && response.headers) || {}; }
   function headerValue(headers, name) {
@@ -1680,6 +1809,7 @@ GSS.Admin = (function createAdmin() {
     return value;
   }
   function emptyResponse(reason, format, origin) {
+    trace("empty-response", "fallback", { reason: reason, format: format ? format.id : "unknown" }, "error", origin || requestUrl);
     logger.error(reason + "; returning an empty virtual response");
     if (path === "/playlist") { GSS.Runtime.doneResponse(200, { "Content-Type": "application/vnd.apple.mpegurl; charset=utf-8", "Cache-Control": "no-store" }, "#EXTM3U\n#EXT-X-ENDLIST\n"); return; }
     if (path === "/youtube" && /(?:[?&]fmt=json3|\.json(?:$|[?#]))/i.test(String(origin || ""))) { GSS.Runtime.doneResponse(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" }, '{"events":[]}'); return; }
@@ -1712,6 +1842,7 @@ GSS.Admin = (function createAdmin() {
     return headers;
   }
   function originalResponse(reason, body, response, upstreamType) {
+    trace("original-subtitle-fallback", "fallback", { reason: reason, contentType: upstreamType || "unknown", bodySize: String(body || "").length }, "warn", origin || requestUrl);
     logger.warn(reason + "; returning the original subtitle body", { fallback: "original", contentType: upstreamType || "unknown" });
     var status = response && (response.status || response.statusCode) || 200;
     GSS.Runtime.doneResponse(status, GSS.Runtime.cleanHeaders(upstreamHeaders(response), upstreamType || undefined), body);
@@ -1735,15 +1866,20 @@ GSS.Admin = (function createAdmin() {
     var source = query.source || config.source;
     var target = query.target || config.target;
     var platform = query.platform || "unknown";
+    currentPlatform = platform;
     if (!origin) { emptyResponse("missing origin URL", null, origin); return; }
     if (path === "/youtube") origin = forwardedOrigin(origin, query);
+
+    trace("subtitle-request", "started", { route: path, mode: mode, source: source, target: target }, "info", origin);
 
     GSS.Runtime.httpGet({ url: origin, headers: upstreamRequestHeaders(platform) }, function (error, body, response) {
       if (error) { emptyResponse("upstream fetch failed: " + String(error), null, origin); return; }
       try {
         var upstreamType = headerValue(upstreamHeaders(response), "content-type");
+        trace("upstream-response", "received", { status: response && (response.status || response.statusCode) || 200, contentType: upstreamType || "unknown", bodySize: String(body || "").length }, "info", origin);
         if (path === "/playlist" && body.indexOf("#EXTM3U") >= 0) {
           var playlist = GSS.M3U8.decorateSubtitlePlaylist(body, origin, mode, source, target, config, logger, platform);
+          trace("subtitle-playlist", playlist === body ? "unchanged" : "rewritten", { bodySize: String(body).length }, "info", origin);
           GSS.Runtime.doneResponse(200, GSS.Runtime.cleanHeaders(upstreamHeaders(response), "application/vnd.apple.mpegurl; charset=utf-8"), playlist);
           return;
         }
@@ -1753,6 +1889,7 @@ GSS.Admin = (function createAdmin() {
           GSS.Subtitle.translateBody(body, origin, upstreamType, mode, source, target, config, logger, function (translateError, translated, changed, format) {
             if (translateError) { originalResponse("translation failed: " + String(translateError), body, response, upstreamType); return; }
             var contentType = format.contentTypeFor ? format.contentTypeFor(translated, upstreamType) : format.contentType;
+            trace("subtitle-translation", changed ? "rewritten" : "unchanged", { format: format.id, mode: mode, source: source, target: target, inputSize: String(body).length, outputSize: String(translated).length }, "info", origin);
             GSS.Runtime.doneResponse(200, GSS.Runtime.cleanHeaders(upstreamHeaders(response), contentType), translated);
           });
           return;

@@ -1,4 +1,4 @@
-// General Stream Subtitle 0.6.0 - manifest
+// General Stream Subtitle 0.6.1 - manifest
 // MIT License - generated file; edit src/ instead.
 (function () {
 "use strict";
@@ -230,7 +230,7 @@ GSS.Language = (function createLanguageTools() {
   };
 })();
 
-GSS.VERSION = "0.6.0";
+GSS.VERSION = "0.6.1";
 GSS.SETTINGS_KEY = "GSS_SETTINGS_V4";
 GSS.PROVIDER_SECRETS_KEY = "GSS_PROVIDER_SECRETS_V1";
 GSS.ADMIN_TOKEN_KEY = "GSS_ADMIN_TOKEN_V1";
@@ -270,6 +270,7 @@ GSS.DEFAULTS = {
   youtubeUseAsr: true,
   youtubeLive: true,
   youtubePreferManual: true,
+  logEnabled: true,
   debug: false,
   cacheEnabled: true,
   cacheTTL: 6 * 60 * 60 * 1000,
@@ -307,7 +308,7 @@ GSS.allowedSettings = {
   safePlayback: "boolean", presetMode: "boolean", platformDiscovery: "boolean", discoveryHlsOnly: "boolean",
   platformMax: "boolean", platformPluto: "boolean", platformPrime: "boolean", platformHulu: "boolean", platformYoutube: "boolean",
   formats: "string", genericMode: "boolean", customDomains: "string", youtubeStrategy: "string",
-  youtubeUseAsr: "boolean", youtubeLive: "boolean", youtubePreferManual: "boolean", debug: "boolean", cacheEnabled: "boolean",
+  youtubeUseAsr: "boolean", youtubeLive: "boolean", youtubePreferManual: "boolean", logEnabled: "boolean", debug: "boolean", cacheEnabled: "boolean",
   cacheTTL: "number", cacheLimit: "number", batchChars: "number", batchItems: "number", translationConcurrency: "number"
 };
 
@@ -396,6 +397,7 @@ GSS.getConfig = function getConfig() {
     config.injectTranslated = !!args.injectTranslated;
     config.bilingualOrder = "translation-first";
     config.cacheEnabled = args.cacheEnabled !== false;
+    config.logEnabled = args.logEnabled !== false;
     config.debug = !!args.debug;
     config.safePlayback = true;
     config.presetMode = true;
@@ -412,13 +414,28 @@ GSS.getConfig = function getConfig() {
 
 GSS.Logger = function Logger(config, scope) {
   var prefix = "[GSS " + GSS.VERSION + "][" + GSS.Runtime.name + "][" + scope + "]";
-  function print(level, message, data) {
+  function persist(level, message, data) {
+    if (!config.logEnabled || !GSS.Diagnostics) return;
     if (!config.debug && (level === "DEBUG" || level === "INFO")) return;
+    GSS.Diagnostics.record({
+      scope: scope,
+      type: "runtime-log",
+      level: level.toLowerCase(),
+      status: level === "ERROR" ? "failed" : level === "WARN" ? "warning" : "observed",
+      message: message,
+      details: data
+    });
+  }
+  function print(level, message, data) {
+    persist(level, message, data);
+    if (!config.debug && (level === "DEBUG" || level === "INFO")) return;
+    var safeMessage = GSS.Diagnostics && GSS.Diagnostics.sanitize ? GSS.Diagnostics.sanitize(message) : message;
+    var safeData = GSS.Diagnostics && GSS.Diagnostics.sanitize ? GSS.Diagnostics.sanitize(data) : data;
     var suffix = "";
-    if (data !== undefined) {
-      try { suffix = " " + JSON.stringify(data); } catch (_) { suffix = " " + String(data); }
+    if (safeData !== undefined) {
+      try { suffix = " " + JSON.stringify(safeData); } catch (_) { suffix = " " + String(safeData); }
     }
-    console.log(prefix + "[" + level + "] " + message + suffix);
+    console.log(prefix + "[" + level + "] " + safeMessage + suffix);
   }
   return {
     debug: function (message, data) { print("DEBUG", message, data); },
@@ -527,7 +544,8 @@ GSS.Url = {
 
 GSS.Diagnostics = (function createDiagnostics() {
   var KEY = "GSS_DIAGNOSTICS_V1";
-  var LIMIT = 30;
+  var LIMIT = 80;
+  var MAX_BYTES = 120000;
 
   function readAll() {
     try {
@@ -543,22 +561,49 @@ GSS.Diagnostics = (function createDiagnostics() {
     return host ? "https://" + host + path : String(url || "").split("?")[0].slice(0, 220);
   }
 
+  function cleanString(value) {
+    var output = String(value || "");
+    output = output.replace(/https?:\/\/[^\s"'<>]+/gi, function (match) { return safeUrl(match); });
+    output = output.replace(/(bearer\s+)[a-z0-9._~+\/-]+=*/gi, "$1[REDACTED]");
+    output = output.replace(/\beyJ[a-z0-9_-]+\.[a-z0-9_-]+\.[a-z0-9_-]+\b/gi, "[REDACTED_JWT]");
+    output = output.replace(/\b(token|authorization|cookie|signature|policy|api[_-]?key|x-amz-[a-z0-9-]+)\s*[:=]\s*[^,\s;&]+/gi, "$1=[REDACTED]");
+    return output.length > 320 ? output.slice(0, 317) + "..." : output;
+  }
+
   function cleanValue(value, depth) {
-    if (depth > 3) return undefined;
+    if (depth > 4) return undefined;
     if (value === null || value === undefined) return value;
-    if (typeof value === "string") return value.length > 240 ? value.slice(0, 237) + "..." : value;
+    if (typeof value === "string") return cleanString(value);
     if (typeof value === "number" || typeof value === "boolean") return value;
-    if (Array.isArray(value)) return value.slice(0, 12).map(function (item) { return cleanValue(item, depth + 1); });
+    if (Array.isArray(value)) return value.slice(0, 16).map(function (item) { return cleanValue(item, depth + 1); });
     if (typeof value === "object") {
       var output = {};
-      Object.keys(value).slice(0, 20).forEach(function (key) {
-        if (/token|authorization|cookie|signature|policy|key/i.test(key)) return;
+      Object.keys(value).slice(0, 24).forEach(function (key) {
+        if (/token|authorization|cookie|signature|policy|secret|password|api.?key/i.test(key)) return;
         var cleaned = cleanValue(value[key], depth + 1);
         if (cleaned !== undefined) output[key] = cleaned;
       });
       return output;
     }
-    return String(value);
+    return cleanString(value);
+  }
+
+  function requestId() {
+    return Date.now().toString(36) + "-" + Math.floor(Math.random() * 1679616).toString(36);
+  }
+
+  function fingerprint(row) {
+    return [row.scope || "", row.platform || "", row.type || "", row.level || "", row.status || "", row.group || row.url || ""].join("|");
+  }
+
+  function trimToBudget(rows) {
+    if (rows.length > LIMIT) rows.length = LIMIT;
+    var serialized = JSON.stringify(rows);
+    while (serialized.length > MAX_BYTES && rows.length > 1) {
+      rows.pop();
+      serialized = JSON.stringify(rows);
+    }
+    return serialized;
   }
 
   function record(event) {
@@ -566,17 +611,49 @@ GSS.Diagnostics = (function createDiagnostics() {
       var rows = readAll();
       var row = cleanValue(event || {}, 0) || {};
       row.time = new Date().toISOString();
+      row.runtime = row.runtime || GSS.Runtime.name;
+      row.requestId = row.requestId || requestId();
+      row.level = String(row.level || "info").toLowerCase();
+      row.status = row.status || "observed";
       if (row.url) row.url = safeUrl(row.url);
-      rows.unshift(row);
-      if (rows.length > LIMIT) rows.length = LIMIT;
-      GSS.Runtime.write(JSON.stringify(rows), KEY);
+      var throttleMs = Math.max(0, Number(row.throttleSeconds || 0)) * 1000;
+      delete row.throttleSeconds;
+      if (throttleMs) {
+        var rowFingerprint = fingerprint(row);
+        for (var i = 0; i < rows.length; i += 1) {
+          if (fingerprint(rows[i]) === rowFingerprint && Date.parse(row.time) - Date.parse(rows[i].lastTime || rows[i].time) < throttleMs) return;
+        }
+      }
+      var latest = rows[0];
+      var now = Date.parse(row.time);
+      if (latest && fingerprint(latest) === fingerprint(row) && now - Date.parse(latest.lastTime || latest.time) < 60000) {
+        row.firstTime = latest.firstTime || latest.time;
+        row.count = Number(latest.count || 1) + 1;
+        row.lastTime = row.time;
+        rows[0] = row;
+      } else {
+        row.count = 1;
+        rows.unshift(row);
+      }
+      GSS.Runtime.write(trimToBudget(rows), KEY);
     } catch (_) {}
   }
 
   function list() { return readAll(); }
   function clear() { return GSS.Runtime.write("[]", KEY); }
+  function sanitize(value) { return cleanValue(value, 0); }
+  function summary() {
+    var rows = readAll(), output = { total: rows.length, errors: 0, warnings: 0, rewritten: 0, bypassed: 0 };
+    rows.forEach(function (row) {
+      if (row.level === "error") output.errors += 1;
+      if (row.level === "warn" || row.level === "warning") output.warnings += 1;
+      if (row.status === "rewritten" || row.changed === true) output.rewritten += 1;
+      if (row.status === "bypassed" || row.status === "fallback") output.bypassed += 1;
+    });
+    return output;
+  }
 
-  return { record: record, list: list, clear: clear, key: KEY };
+  return { record: record, list: list, clear: clear, summary: summary, sanitize: sanitize, requestId: requestId, safeUrl: safeUrl, key: KEY };
 })();
 
 GSS.Formats = (function createFormatRegistry() {
@@ -1421,14 +1498,20 @@ GSS.MPD = (function createMpdTools() {
 (function manifestEntry() {
   var config = GSS.getConfig();
   var logger = GSS.Logger(config, "manifest");
+  var requestId = GSS.Diagnostics ? GSS.Diagnostics.requestId() : "";
 
-  function record(platform, type, changed, details) {
-    if (!config.debug || !GSS.Diagnostics) return;
+  function record(platform, type, changed, details, status, level) {
+    if (!config.logEnabled || !GSS.Diagnostics) return;
     GSS.Diagnostics.record({
+      requestId: requestId,
       scope: "manifest",
       url: GSS.Runtime.request.url || "",
       platform: platform ? platform.id : "unknown",
       type: type,
+      level: level || "info",
+      status: status || (changed ? "rewritten" : "unchanged"),
+      group: type === "hls-media" ? (platform ? platform.id : "unknown") + "|hls-media" : "",
+      throttleSeconds: type === "hls-media" ? 30 : 0,
       changed: !!changed,
       details: details || {}
     });
@@ -1436,14 +1519,15 @@ GSS.MPD = (function createMpdTools() {
 
   try {
     var body = GSS.Runtime.response.body || "";
-    if (!config.enabled) { GSS.Runtime.passThrough(); return; }
+    if (!config.enabled) { record(null, "module-disabled", false, {}, "bypassed"); GSS.Runtime.passThrough(); return; }
     var requestUrl = GSS.Runtime.request.url || "";
     var platform = GSS.Platforms.detect(requestUrl, config);
-    if (!platform || !GSS.Platforms.enabled(platform, config)) { GSS.Runtime.passThrough(); return; }
+    if (!platform) { record(null, "platform-unmatched", false, {}, "bypassed"); GSS.Runtime.passThrough(); return; }
+    if (!GSS.Platforms.enabled(platform, config)) { record(platform, "platform-disabled", false, {}, "bypassed"); GSS.Runtime.passThrough(); return; }
     var processingMode = "full";
     if (platform.id === "discovery") processingMode = String(config.discoveryMode || "full");
     else if (config.safePlayback && /^(max|pluto|prime|hulu)$/.test(platform.id)) processingMode = "hls-only";
-    if (processingMode === "off") { GSS.Runtime.passThrough(); return; }
+    if (processingMode === "off") { record(platform, "adapter-off", false, { processingMode: processingMode }, "bypassed"); GSS.Runtime.passThrough(); return; }
     var output = body;
     var contentType = "";
 
@@ -1452,9 +1536,9 @@ GSS.MPD = (function createMpdTools() {
       var summary = GSS.M3U8.inspectTrackTypes(body.replace(/\r\n/g, "\n").split("\n"));
       output = GSS.M3U8.injectTracks(body, requestUrl, config, logger, platform);
       contentType = "application/vnd.apple.mpegurl; charset=utf-8";
-      record(platform, media ? "hls-media" : "hls-master", output !== body, summary);
+      record(platform, media ? "hls-media" : "hls-master", output !== body, summary, output !== body ? "rewritten" : "unchanged");
     } else if (processingMode === "hls-only") {
-      record(platform, "safe-playback-bypass", false, { prefix: String(body).slice(0, 32) });
+      record(platform, "safe-playback-bypass", false, { responseKind: /<MPD\b/i.test(body) ? "dash" : /^\s*[\[{]/.test(body) ? "json" : "unknown" }, "bypassed");
       GSS.Runtime.passThrough(); return;
     } else if (/<MPD\b/i.test(body)) {
       output = GSS.MPD.injectTrack(body, requestUrl, config, logger, platform);
@@ -1466,14 +1550,14 @@ GSS.MPD = (function createMpdTools() {
       contentType = "application/json; charset=utf-8";
       record(platform, "playback-json", jsonResult.changed, jsonResult.summary);
     } else {
-      record(platform, "unsupported-response", false, { prefix: String(body).slice(0, 32) });
+      record(platform, "unsupported-response", false, { bodySize: String(body).length }, "bypassed", "warn");
       GSS.Runtime.passThrough(); return;
     }
     if (output === body) GSS.Runtime.passThrough();
     else GSS.Runtime.doneBody(output, GSS.Runtime.response.headers, contentType);
   } catch (error) {
     logger.error("manifest processing failed; original response preserved", { error: String(error), stack: error && error.stack });
-    if (GSS.Diagnostics) GSS.Diagnostics.record({ scope: "manifest", url: GSS.Runtime.request.url || "", type: "exception", error: String(error) });
+    if (config.logEnabled && GSS.Diagnostics) GSS.Diagnostics.record({ requestId: requestId, scope: "manifest", url: GSS.Runtime.request.url || "", type: "exception", level: "error", status: "failed", error: String(error) });
     GSS.Runtime.passThrough();
   }
 })();

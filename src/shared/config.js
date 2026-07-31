@@ -1,4 +1,4 @@
-GSS.VERSION = "0.6.0";
+GSS.VERSION = "0.6.1";
 GSS.SETTINGS_KEY = "GSS_SETTINGS_V4";
 GSS.PROVIDER_SECRETS_KEY = "GSS_PROVIDER_SECRETS_V1";
 GSS.ADMIN_TOKEN_KEY = "GSS_ADMIN_TOKEN_V1";
@@ -38,6 +38,7 @@ GSS.DEFAULTS = {
   youtubeUseAsr: true,
   youtubeLive: true,
   youtubePreferManual: true,
+  logEnabled: true,
   debug: false,
   cacheEnabled: true,
   cacheTTL: 6 * 60 * 60 * 1000,
@@ -75,7 +76,7 @@ GSS.allowedSettings = {
   safePlayback: "boolean", presetMode: "boolean", platformDiscovery: "boolean", discoveryHlsOnly: "boolean",
   platformMax: "boolean", platformPluto: "boolean", platformPrime: "boolean", platformHulu: "boolean", platformYoutube: "boolean",
   formats: "string", genericMode: "boolean", customDomains: "string", youtubeStrategy: "string",
-  youtubeUseAsr: "boolean", youtubeLive: "boolean", youtubePreferManual: "boolean", debug: "boolean", cacheEnabled: "boolean",
+  youtubeUseAsr: "boolean", youtubeLive: "boolean", youtubePreferManual: "boolean", logEnabled: "boolean", debug: "boolean", cacheEnabled: "boolean",
   cacheTTL: "number", cacheLimit: "number", batchChars: "number", batchItems: "number", translationConcurrency: "number"
 };
 
@@ -164,6 +165,7 @@ GSS.getConfig = function getConfig() {
     config.injectTranslated = !!args.injectTranslated;
     config.bilingualOrder = "translation-first";
     config.cacheEnabled = args.cacheEnabled !== false;
+    config.logEnabled = args.logEnabled !== false;
     config.debug = !!args.debug;
     config.safePlayback = true;
     config.presetMode = true;

@@ -4,7 +4,7 @@
 
 项目通过 HTTPS MITM 读取播放器清单、播放器响应或文本字幕，在原有字幕菜单中加入一个可见的 **`Translate-zh`** 轨道。只有当用户选择该轨道后，模块才获取原字幕、调用翻译 Provider，并返回双语或纯翻译字幕。
 
-> 当前版本：**v0.6.0**
+> 当前版本：**v0.6.1**
 > 支持系统：iOS、iPadOS、macOS、tvOS（具体能力取决于代理客户端与流媒体 App）  
 > 开源协议：MIT
 
@@ -36,6 +36,7 @@
 - 支持 YouTube 普通视频、Shorts、YouTube Live 和 YouTube TV 的文本字幕轨。
 - 支持多种翻译 Provider、备用 Provider 链和自定义 API。
 - 提供 `gss.local` 本地管理页面，设置会保存在代理软件的持久化存储中。
+- 提供可复制、可清空的脱敏运行日志，覆盖清单、字幕网关、翻译和安全放行阶段。
 - 不修改视频、音频、DRM、账号鉴权或播放授权。
 
 ## 工作原理
@@ -295,7 +296,8 @@ Shadowrocket 原生编辑器不会把字符串候选值渲染成下拉菜单，�
 | `YT_LIVE` | `true` | 是否处理 YouTube 直播文本字幕 |
 | `PURE_TRACK` | `false` | 是否额外显示纯翻译字幕轨 |
 | `CACHE` | `true` | 是否启用翻译缓存 |
-| `DEBUG` | `false` | 是否输出调试日志 |
+| `LOGS` | `true` | 保存脱敏运行日志，方便排查播放和字幕错误 |
+| `DEBUG` | `false` | 是否在客户端控制台输出详细日志 |
 
 Surge 继续提供 `SOURCE`、`TARGET`、`PROVIDER`、`PLATFORMS`、`DISCOVERY_MODE` 等文本参数；完整自定义配置仍可通过 `gss.local` 管理。
 
@@ -341,7 +343,8 @@ Surge 继续提供 `SOURCE`、`TARGET`、`PROVIDER`、`PLATFORMS`、`DISCOVERY_M
 
 - `cacheEnabled`：翻译缓存开关。
 - `cacheTTL`：缓存有效时间。
-- `debug`：调试日志和运行诊断开关，默认关闭以减少持久化写入和控制台开销。
+- `logEnabled`：持久化脱敏运行日志，默认开启并最多保存 80 条。
+- `debug`：客户端控制台详细输出，默认关闭；排错通常只需保持 `LOGS=true`。
 - Google 免费接口会并行处理最多两个独立翻译批次，并保持原字幕顺序。
 
 ## 常用配置示例
@@ -415,6 +418,14 @@ cdn.example.net
 ```
 
 ## 版本更新记录
+
+### v0.6.1 — 脱敏运行日志
+
+- 默认记录清单命中、字幕上游、格式识别、翻译、回退和异常阶段。
+- 增加 `LOGS` 原生开关，与控制台 `DEBUG` 分离。
+- 日志使用 80 条环形存储并合并一分钟内的重复事件。
+- 自动移除 URL 查询参数、Token、Cookie、Authorization、签名、JWT、密码和 API Key。
+- `http://gss.local/logs` 新增统计、详细记录、复制全部、JSON 导出和清空入口。
 
 ### v0.6.0 — Apple TV 播放优先预设
 
@@ -516,6 +527,16 @@ http://gss.local/
 
 不要一上来就只测试直播频道，因为直播可能只有内嵌 CEA-608/708，没有可供模块读取的 timedtext 字幕轨。
 
+### 收集运行日志
+
+1. 在 Shadowrocket 模块参数中保持 `LOGS=true`，不需要打开 `DEBUG`。
+2. 打开 `http://gss.local/logs`，先清空旧日志。
+3. 完全退出目标流媒体 App，重新打开并重现一次问题。
+4. 再次打开 `http://gss.local/logs`，查看具体停在哪个平台和处理阶段。
+5. 使用“复制全部日志”或 `/logs.json` 导出脱敏记录后再提交 Issue。
+
+日志只包含模块实际命中的请求。完全绕过 MITM 或根本没有命中脚本规则的请求不会出现在记录里。
+
 ### 常见问题
 
 #### `gss.local` 无法打开
@@ -550,21 +571,23 @@ http://gss.local/
 
 #### 修改模块参数后没有变化
 
-Shadowrocket v0.6.0 的平台开关会覆盖旧的 `gss.local` 设置；如果没有变化，请先更新模块，再完全退出 Shadowrocket 和目标 App 后重开。Surge/Loon 仍需在管理页面重置或更新旧设置。
+Shadowrocket v0.6.1 的平台开关会覆盖旧的 `gss.local` 设置；如果没有变化，请先更新模块，再完全退出 Shadowrocket 和目标 App 后重开。Surge/Loon 仍需在管理页面重置或更新旧设置。
 
 ### 日志关键词
 
-先设置 `DEBUG=true`，再关注：
+在 `/logs` 页面重点关注以下阶段：
 
 ```text
-platform detected
-master manifest inspected
-subtitle playlist virtualized
-youtube player response inspected
-youtube caption translated
-translation provider selected
-translation provider failed
-subtitle format unsupported
+hls-master
+platform-disabled
+safe-playback-bypass
+subtitle-request
+upstream-response
+subtitle-translation
+original-subtitle-fallback
+player-response
+caption-translation
+runtime-log
 ```
 
 ## 已知限制
@@ -620,6 +643,7 @@ modules/
 
 - 模块不会修改 DRM、账号权限、视频或音频内容。
 - API Key 使用独立的 `GSS_PROVIDER_SECRETS_V1` 存储，不写入模块安装链接、普通配置响应或调试日志。
+- 运行日志会自动脱敏并限制为约 120 KB，但分享前仍建议人工检查一次导出的 JSON。
 - 代理软件的持久化存储不等同于系统钥匙串或硬件安全区。
 - 建议为 OpenAI、Gemini、DeepL 等服务创建低额度、可撤销的专用 API Key。
 - 使用自建 Relay 时，应限制可调用的模型、额度、来源和接口路径。

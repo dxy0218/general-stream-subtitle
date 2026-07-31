@@ -243,7 +243,7 @@ test("Shadowrocket exposes only native boolean switches", () => {
   const descriptionLine = content.split("\n").find((line) => line.startsWith("#!arguments-desc="));
   const entries = argumentLine.slice("#!arguments=".length).split(",").map((entry) => entry.trim().split(":"));
   const names = entries.map(([name]) => name);
-  assert.deepEqual(names, ["DISCOVERY", "DISCOVERY_HLS_ONLY", "MAX", "PLUTO", "PRIME", "HULU", "YOUTUBE", "YT_ASR", "YT_LIVE", "PURE_TRACK", "CACHE", "DEBUG"]);
+  assert.deepEqual(names, ["DISCOVERY", "DISCOVERY_HLS_ONLY", "MAX", "PLUTO", "PRIME", "HULU", "YOUTUBE", "YT_ASR", "YT_LIVE", "PURE_TRACK", "CACHE", "LOGS", "DEBUG"]);
   for (const [name, value] of entries) {
     assert.match(value, /^(?:true|false)$/);
     assert.match(descriptionLine, new RegExp(`${name}: `));

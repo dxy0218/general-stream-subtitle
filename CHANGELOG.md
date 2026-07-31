@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.6.1
+
+- Add an enabled-by-default, bounded persistent event log for manifest, gateway, translation, fallback, YouTube and exception stages.
+- Add a native `LOGS` switch independently from verbose console `DEBUG` output.
+- Add automatic redaction for signed query strings, tokens, cookies, authorization values, JWTs, passwords and API keys.
+- Add a mobile-friendly `gss.local/logs` viewer with summary counts, expandable details, copy, JSON export and clear actions.
+- Deduplicate repeated events, cap storage at 80 records/120 KB and add logging regression tests.
+
 ## 0.6.0
 
 - Replace Shadowrocket string parameters with native boolean switches and a fixed Chinese subtitle preset.

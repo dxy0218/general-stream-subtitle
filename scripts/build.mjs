@@ -76,9 +76,9 @@ const manifestUrl = `${rawBase}/dist/manifest.js`;
 const gatewayUrl = `${rawBase}/dist/gateway.js`;
 const youtubeUrl = `${rawBase}/dist/youtube.js`;
 const youtubeCaptionUrl = `${rawBase}/dist/youtube-caption.js`;
-const defaultArgs = "source=auto&target=zh-CN&trackName=Translate-zh&provider=google-free&platforms=all&discoveryMode=full&safePlayback=false&formats=all&genericMode=false&youtubeStrategy=direct&youtubeUseAsr=true&youtubeLive=true&youtubePreferManual=true&injectTranslated=false&bilingualOrder=translation-first&cacheEnabled=true&debug=false";
-const surgeArgs = "source=%SOURCE%&target=%TARGET%&trackName=%TRACK_NAME%&provider=%PROVIDER%&platforms=%PLATFORMS%&discoveryMode=%DISCOVERY_MODE%&formats=%FORMATS%&genericMode=%GENERIC%&youtubeStrategy=%YT_STRATEGY%&youtubeUseAsr=%YT_ASR%&youtubeLive=%YT_LIVE%&youtubePreferManual=%YT_MANUAL%&injectTranslated=%PURE_TRACK%&bilingualOrder=%ORDER%&cacheEnabled=%CACHE%&debug=%DEBUG%";
-const shadowArgs = "presetMode=true&safePlayback=true&platformDiscovery={{{DISCOVERY}}}&discoveryHlsOnly={{{DISCOVERY_HLS_ONLY}}}&platformMax={{{MAX}}}&platformPluto={{{PLUTO}}}&platformPrime={{{PRIME}}}&platformHulu={{{HULU}}}&platformYoutube={{{YOUTUBE}}}&youtubeUseAsr={{{YT_ASR}}}&youtubeLive={{{YT_LIVE}}}&injectTranslated={{{PURE_TRACK}}}&cacheEnabled={{{CACHE}}}&debug={{{DEBUG}}}";
+const defaultArgs = "source=auto&target=zh-CN&trackName=Translate-zh&provider=google-free&platforms=all&discoveryMode=full&safePlayback=false&formats=all&genericMode=false&youtubeStrategy=direct&youtubeUseAsr=true&youtubeLive=true&youtubePreferManual=true&injectTranslated=false&bilingualOrder=translation-first&cacheEnabled=true&logEnabled=true&debug=false";
+const surgeArgs = "source=%SOURCE%&target=%TARGET%&trackName=%TRACK_NAME%&provider=%PROVIDER%&platforms=%PLATFORMS%&discoveryMode=%DISCOVERY_MODE%&formats=%FORMATS%&genericMode=%GENERIC%&youtubeStrategy=%YT_STRATEGY%&youtubeUseAsr=%YT_ASR%&youtubeLive=%YT_LIVE%&youtubePreferManual=%YT_MANUAL%&injectTranslated=%PURE_TRACK%&bilingualOrder=%ORDER%&cacheEnabled=%CACHE%&logEnabled=%LOGS%&debug=%DEBUG%";
+const shadowArgs = "presetMode=true&safePlayback=true&platformDiscovery={{{DISCOVERY}}}&discoveryHlsOnly={{{DISCOVERY_HLS_ONLY}}}&platformMax={{{MAX}}}&platformPluto={{{PLUTO}}}&platformPrime={{{PRIME}}}&platformHulu={{{HULU}}}&platformYoutube={{{YOUTUBE}}}&youtubeUseAsr={{{YT_ASR}}}&youtubeLive={{{YT_LIVE}}}&injectTranslated={{{PURE_TRACK}}}&cacheEnabled={{{CACHE}}}&logEnabled={{{LOGS}}}&debug={{{DEBUG}}}";
 const shadowSwitches = [
   { key: "DISCOVERY", value: false, description: "Discovery+ 实验适配；默认关闭，打开后仅处理 HLS 主清单" },
   { key: "DISCOVERY_HLS_ONLY", value: true, description: "Discovery+ 播放保护；保持开启以跳过 DASH 和播放 JSON" },
@@ -91,6 +91,7 @@ const shadowSwitches = [
   { key: "YT_LIVE", value: true, description: "处理 YouTube 直播文本字幕" },
   { key: "PURE_TRACK", value: false, description: "额外显示纯翻译字幕轨" },
   { key: "CACHE", value: true, description: "启用翻译缓存" },
+  { key: "LOGS", value: true, description: "保存脱敏运行日志，便于排查播放和字幕错误" },
   { key: "DEBUG", value: false, description: "输出调试日志" }
 ];
 const shadowArgumentHeader = shadowSwitches.map((item) => `${item.key}:${item.value}`).join(", ");
@@ -100,7 +101,7 @@ const surge = `#!name=General Stream Subtitle
 #!desc=多平台 HLS/DASH、多字幕格式、多翻译引擎（v${pkg.version}）
 #!author=dxy0218 & contributors
 #!homepage=${repo}
-#!arguments=SOURCE=auto&TARGET=zh-CN&TRACK_NAME=Translate-zh&PROVIDER=google-free&PLATFORMS=all&FORMATS=all&GENERIC=false&YT_STRATEGY=direct&YT_ASR=true&YT_LIVE=true&YT_MANUAL=true&PURE_TRACK=false&ORDER=translation-first&CACHE=true&DEBUG=false
+#!arguments=SOURCE=auto&TARGET=zh-CN&TRACK_NAME=Translate-zh&PROVIDER=google-free&PLATFORMS=all&FORMATS=all&GENERIC=false&YT_STRATEGY=direct&YT_ASR=true&YT_LIVE=true&YT_MANUAL=true&PURE_TRACK=false&ORDER=translation-first&CACHE=true&LOGS=true&DEBUG=false
 
 [General]
 force-http-engine-hosts = %APPEND% ${forceHttpHosts}
