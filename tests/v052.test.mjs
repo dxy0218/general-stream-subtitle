@@ -125,14 +125,23 @@ test("generated modules isolate Pluto and add Paramount Live rules", () => {
     assert.match(content, /GSS Max Discovery Playback/);
     assert.match(content, /discomax\\\.com/);
     assert.match(content, /uplynk\\\.com/);
+    const hostnameLine = content.split("\n").find((line) => line.startsWith("hostname = "));
+    const hostnameHosts = hostnameLine.replace(/^hostname = (?:%APPEND% )?/, "").split(",").map((host) => host.trim());
     assert.doesNotMatch(content, /hostname = .*\*\.pluto\.tv/);
     assert.doesNotMatch(content, /hostname = .*\*\.itunes\.apple\.com/);
     assert.doesNotMatch(content, /hostname = .*\*\.tv\.apple\.com/);
+    assert.equal(hostnameHosts.includes("*.uplynk.com"), false);
+    assert.equal(hostnameHosts.includes("*.disco-api.com"), false);
+    assert.equal(hostnameHosts.includes("*.discoveryplus.com"), false);
+    assert.equal(hostnameHosts.includes("*.discoveryplus.co.uk"), false);
+    assert.equal(hostnameHosts.includes("*.discoveryplus.in"), false);
+    assert.equal(hostnameHosts.includes("*discovery*.uplynk.com"), true);
+    assert.equal(hostnameHosts.includes("dplus-*.akamaized.net"), true);
     assert.match(content, /service-stitcher\.clusters\.pluto\.tv/);
   }
 });
 
-test("generated rules route Max and Discovery through one specialized handler", () => {
+test("generated rules keep Max broad but restrict Discovery to media hosts", () => {
   const content = fs.readFileSync(path.join(root, "modules", "GeneralStreamSubtitle.plugin"), "utf8");
   const generalLine = content.split("\n").find((line) => line.includes("tag=GSS Manifest,"));
   const warnerLine = content.split("\n").find((line) => line.includes("tag=GSS Max Discovery Playback,"));
@@ -142,10 +151,16 @@ test("generated rules route Max and Discovery through one specialized handler", 
   const opaqueMaxUrl = "https://default.any-any.prd.api.max.com/any/7f4d1b2a";
   const graphQlMaxUrl = "https://default.any-any.prd.api.max.com/graphql";
   const discoveryUrl = "https://content-ause1-ur-discovery1.uplynk.com/asset/master.m3u8?token=x";
+  const discoveryDeviceUrl = "https://auth.discoveryplus.com/device/register";
+  const discoveryAccountUrl = "https://api.discoveryplus.com/account/profile";
+  const discoveryApiUrl = "https://eu1-prod.disco-api.com/graphql";
   assert.equal(general.test(maxUrl), false);
   assert.equal(general.test(discoveryUrl), false);
   assert.equal(warner.test(maxUrl), true);
   assert.equal(warner.test(opaqueMaxUrl), true);
   assert.equal(warner.test(graphQlMaxUrl), true);
   assert.equal(warner.test(discoveryUrl), true);
+  assert.equal(warner.test(discoveryDeviceUrl), false);
+  assert.equal(warner.test(discoveryAccountUrl), false);
+  assert.equal(warner.test(discoveryApiUrl), false);
 });

@@ -129,6 +129,8 @@ gss.local
 
 当前模块不需要对 `*.googlevideo.com` 做 MITM，因为它不修改 YouTube 视频或音频流。给视频 CDN 强制解密可能增加性能消耗或导致播放异常。
 
+在 Apple TV + Shadowrocket 上使用 Discovery+ 时，默认模块只解密可识别的 Discovery 媒体 CDN。`*.discoveryplus.com`、`*.disco-api.com` 等账号、设备和应用 API 域名会绕过 MITM，避免触发“There's a Problem With Your Device Setup”。不要为了扩大匹配范围而手动把这些整站域名加入 MITM。
+
 如果使用 `customDomains` 接入自定义平台，还需要在代理软件的 MITM hostname 中手动加入对应域名。管理页面能够保存自定义域名，但无法动态改写客户端的 MITM 域名列表。
 
 ## 支持的平台
@@ -148,7 +150,7 @@ gss.local
 | Hulu | `hulu` | HLS + WebVTT |
 | Paramount+ | `paramount` | HLS + WebVTT |
 | Peacock | `peacock` | HLS + WebVTT |
-| Discovery+ | `discovery` | Uplynk/H.264 CDN、HLS/DASH、播放 JSON 与 WebVTT |
+| Discovery+ | `discovery` | Discovery 媒体 CDN 上的 HLS/DASH、播放 JSON 与 WebVTT |
 | Fubo | `fubo` | HLS + WebVTT |
 | TED | `ted` | HLS + WebVTT |
 

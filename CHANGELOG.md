@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.5.5
+
+- Restrict default Discovery+ HTTPS interception to identifiable media CDN hosts so Apple TV device and account setup requests bypass MITM.
+- Add generated-rule regression coverage for Discovery+ account, device, and API hosts.
+
 ## 0.5.4
 
 - Remove shared Apple Music/Apple TV hosts from the default MITM list to prevent Apple Music certificate validation errors.

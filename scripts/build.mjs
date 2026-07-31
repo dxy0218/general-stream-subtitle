@@ -30,14 +30,14 @@ bundle("gateway", base.concat(formatFiles, providerFiles, ["src/manifest/m3u8.js
 bundle("youtube", base.concat(["src/youtube/player.js", "src/youtube/main.js"]));
 bundle("youtube-caption", base.concat(formatFiles, providerFiles, ["src/subtitle/translate.js", "src/youtube/caption-main.js"]));
 
-const manifestPattern = String.raw`^https?:\/\/(?!(?:[^\/]+\.)*(?:pluto\.tv|pplus\.paramount\.tech|paramount\.tech|paramountplus\.com|cbsaavideo\.com|cbsivideo\.com|cbs\.com|max\.com|discomax\.com|h264\.io|hbomaxcdn\.com|api\.hbo\.com|uplynk\.com|disco-api\.com|discoveryplus\.com|discoveryplus\.co\.uk|discoveryplus\.in)(?::\d+)?\/).+\.(?:m3u8|mpd)(?:\?.*)?$`;
+const manifestPattern = String.raw`^https?:\/\/(?!(?:[^\/]+\.)*(?:pluto\.tv|pplus\.paramount\.tech|paramount\.tech|paramountplus\.com|cbsaavideo\.com|cbsivideo\.com|cbs\.com|max\.com|discomax\.com|h264\.io|hbomaxcdn\.com|api\.hbo\.com|uplynk\.com)(?::\d+)?\/).+\.(?:m3u8|mpd)(?:\?.*)?$`;
 const plutoMasterPattern = String.raw`^https?:\/\/(?:stitcher-ipv4\.pluto\.tv|service-stitcher\.clusters\.pluto\.tv|stitcher\.pluto\.tv)\/.*\/master(?:\/[^?]*\.m3u8|\.m3u8)(?:\?.*)?$`;
 const paramountManifestPattern = String.raw`^https?:\/\/(?:[^\/]+\.)*(?:pplus\.paramount\.tech|paramount\.tech|paramountplus\.com|cbsaavideo\.com|cbsivideo\.com|cbs\.com)\/.*(?:master|manifest)[^?]*\.(?:m3u8|mpd)(?:\?.*)?$`;
 const paramountPlaybackPattern = String.raw`^https?:\/\/(?:[^\/]+\.)*(?:pplus\.paramount\.tech|paramount\.tech|paramountplus\.com|cbsaavideo\.com|cbsivideo\.com|cbs\.com)\/.*(?:playback|stream|live|linear|channel|station|session|manifest).*`;
-// Max and Discovery increasingly use opaque playback/GraphQL paths. Match their
-// media/API hosts broadly and let manifest.js inspect the response body before
-// deciding whether it is a supported manifest or playback JSON document.
-const warnerPlaybackPattern = String.raw`^https?:\/\/(?:[^\/]+\.)*(?:max\.com|discomax\.com|h264\.io|hbomaxcdn\.com|api\.hbo\.com|uplynk\.com|disco-api\.com|discoveryplus\.com|discoveryplus\.co\.uk|discoveryplus\.in)\/.*`;
+// Max uses opaque playback/GraphQL paths, while Discovery account and device
+// hosts can reject HTTPS interception on Apple TV. Keep Discovery interception
+// on identifiable media CDNs and leave its app/API hosts untouched.
+const warnerPlaybackPattern = String.raw`^https?:\/\/(?:(?:[^\/]+\.)*(?:max\.com|discomax\.com|h264\.io|hbomaxcdn\.com|api\.hbo\.com)|[^\/.]*discovery[^\/.]*\.uplynk\.com)\/.*`;
 const gatewayPattern = String.raw`^https?:\/\/(?:gss\.local|127\.0\.0\.1(?::6170)?|localhost(?::6170)?)\/.*`;
 const youtubePlayerPattern = String.raw`^https?:\/\/(?:www\.youtube\.com|m\.youtube\.com|music\.youtube\.com|tv\.youtube\.com|youtubei\.googleapis\.com)\/youtubei\/v1\/player(?:\?.*)?$`;
 const youtubeCaptionPattern = String.raw`^https?:\/\/(?:www\.youtube\.com|m\.youtube\.com|music\.youtube\.com|tv\.youtube\.com)\/api\/timedtext\?.*(?:gss_mode|gss_v)=.*`;
@@ -50,7 +50,9 @@ const mitmHosts = [
   "*.hls.pv-cdn.net", "*.hls.row.aiv-cdn.net", "*avodhlss3ww-a.akamaihd.net", "s3.amazonaws.com", "cf-timedtext.aux.pv-cdn.net",
   "d1v5ir2lpwr8os.cloudfront.net", "d22qjgkvxw22r6.cloudfront.net", "d25xi40x97liuc.cloudfront.net", "d27xxe7juh1us6.cloudfront.net", "dmqdd6hw24ucf.cloudfront.net",
   "vodmanifest.hulustream.com", "manifest-dp.hulustream.com", "*.pplus.paramount.tech", "*.paramount.tech", "*.paramountplus.com", "*.cbsaavideo.com", "*.cbsivideo.com", "*.cbs.com",
-  "*.cdn.peacocktv.com", "*.uplynk.com", "*.disco-api.com", "*.discoveryplus.com", "*.discoveryplus.co.uk", "*.discoveryplus.in", "dplus-ph-prod-vod.akamaized.net",
+  // Discovery app, account, and device hosts remain outside MITM. Only known
+  // Discovery media CDN host shapes are intercepted by default.
+  "*.cdn.peacocktv.com", "*discovery*.uplynk.com", "dplus-*.akamaized.net",
   "*.fubo.tv", "hls.ted.com",
   "*.bbci.co.uk", "vod-*-live.akamaized.net", "*.viki.io", "*.viki.com", "*.tubi.video", "*.tubitv.com", "stitcher-ipv4.pluto.tv", "service-stitcher.clusters.pluto.tv", "stitcher.pluto.tv",
   "*.crunchyroll.com", "*.vrv.co", "*.dazn.com", "*.dazn-api.com", "*.plex.tv",
