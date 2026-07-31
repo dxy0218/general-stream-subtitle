@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+## 0.5.3
+
+- Match all responses on known Max and Discovery playback hosts so opaque and GraphQL playback paths reach the content-aware manifest adapter.
 - Expand Discovery+ detection to regional Uplynk hosts, Discovery domains, and shared `dplus-*.h264.io` CDN hosts.
 - Add current Max `discomax.com` playback coverage and isolate Max/Discovery rules from the generic manifest rule.
 - Process Discovery+ playback JSON text-track arrays and broaden supported URL/language/label fields.

@@ -137,9 +137,13 @@ test("generated rules route Max and Discovery through one specialized handler", 
   const general = new RegExp(generalLine.slice("http-response ".length, generalLine.indexOf(" script-path=")));
   const warner = new RegExp(warnerLine.slice("http-response ".length, warnerLine.indexOf(" script-path=")));
   const maxUrl = "https://api.discomax.com/playback/session";
+  const opaqueMaxUrl = "https://default.any-any.prd.api.max.com/any/7f4d1b2a";
+  const graphQlMaxUrl = "https://default.any-any.prd.api.max.com/graphql";
   const discoveryUrl = "https://content-ause1-ur-discovery1.uplynk.com/asset/master.m3u8?token=x";
   assert.equal(general.test(maxUrl), false);
   assert.equal(general.test(discoveryUrl), false);
   assert.equal(warner.test(maxUrl), true);
+  assert.equal(warner.test(opaqueMaxUrl), true);
+  assert.equal(warner.test(graphQlMaxUrl), true);
   assert.equal(warner.test(discoveryUrl), true);
 });

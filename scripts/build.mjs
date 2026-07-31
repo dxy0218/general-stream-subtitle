@@ -34,7 +34,10 @@ const manifestPattern = String.raw`^https?:\/\/(?!(?:[^\/]+\.)*(?:pluto\.tv|pplu
 const plutoMasterPattern = String.raw`^https?:\/\/(?:stitcher-ipv4\.pluto\.tv|service-stitcher\.clusters\.pluto\.tv|stitcher\.pluto\.tv)\/.*\/master(?:\/[^?]*\.m3u8|\.m3u8)(?:\?.*)?$`;
 const paramountManifestPattern = String.raw`^https?:\/\/(?:[^\/]+\.)*(?:pplus\.paramount\.tech|paramount\.tech|paramountplus\.com|cbsaavideo\.com|cbsivideo\.com|cbs\.com)\/.*(?:master|manifest)[^?]*\.(?:m3u8|mpd)(?:\?.*)?$`;
 const paramountPlaybackPattern = String.raw`^https?:\/\/(?:[^\/]+\.)*(?:pplus\.paramount\.tech|paramount\.tech|paramountplus\.com|cbsaavideo\.com|cbsivideo\.com|cbs\.com)\/.*(?:playback|stream|live|linear|channel|station|session|manifest).*`;
-const warnerPlaybackPattern = String.raw`^https?:\/\/(?:[^\/]+\.)*(?:max\.com|discomax\.com|h264\.io|hbomaxcdn\.com|api\.hbo\.com|uplynk\.com|disco-api\.com|discoveryplus\.com|discoveryplus\.co\.uk|discoveryplus\.in)\/.*(?:(?:manifest|playlist|playback|stream|caption|subtitle|hls|dash)|\.(?:m3u8|mpd)(?:[?#]|$)).*`;
+// Max and Discovery increasingly use opaque playback/GraphQL paths. Match their
+// media/API hosts broadly and let manifest.js inspect the response body before
+// deciding whether it is a supported manifest or playback JSON document.
+const warnerPlaybackPattern = String.raw`^https?:\/\/(?:[^\/]+\.)*(?:max\.com|discomax\.com|h264\.io|hbomaxcdn\.com|api\.hbo\.com|uplynk\.com|disco-api\.com|discoveryplus\.com|discoveryplus\.co\.uk|discoveryplus\.in)\/.*`;
 const gatewayPattern = String.raw`^https?:\/\/(?:gss\.local|127\.0\.0\.1(?::6170)?|localhost(?::6170)?)\/.*`;
 const youtubePlayerPattern = String.raw`^https?:\/\/(?:www\.youtube\.com|m\.youtube\.com|music\.youtube\.com|tv\.youtube\.com|youtubei\.googleapis\.com)\/youtubei\/v1\/player(?:\?.*)?$`;
 const youtubeCaptionPattern = String.raw`^https?:\/\/(?:www\.youtube\.com|m\.youtube\.com|music\.youtube\.com|tv\.youtube\.com)\/api\/timedtext\?.*(?:gss_mode|gss_v)=.*`;
