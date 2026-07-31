@@ -42,7 +42,9 @@ const gatewayPattern = String.raw`^https?:\/\/(?:gss\.local|127\.0\.0\.1(?::6170
 const youtubePlayerPattern = String.raw`^https?:\/\/(?:www\.youtube\.com|m\.youtube\.com|music\.youtube\.com|tv\.youtube\.com|youtubei\.googleapis\.com)\/youtubei\/v1\/player(?:\?.*)?$`;
 const youtubeCaptionPattern = String.raw`^https?:\/\/(?:www\.youtube\.com|m\.youtube\.com|music\.youtube\.com|tv\.youtube\.com)\/api\/timedtext\?.*(?:gss_mode|gss_v)=.*`;
 const mitmHosts = [
-  "*.itunes.apple.com", "*.tv.apple.com",
+  // Apple Music and Apple TV share play.itunes.apple.com. Intercepting it from
+  // the default module triggers Apple Music's certificate validation, so Apple
+  // media hosts must remain opt-in rather than part of the safe default.
   "*.max.com", "*.discomax.com", "*.h264.io", "*.hbomaxcdn.com", "*.api.hbo.com",
   "*.media.dssott.com", "*.prod.dssott.com", "*.media.starott.com", "*.prod.starott.com", "*.media.dssedge.com", "*.prod.dssedge.com",
   "*.hls.pv-cdn.net", "*.hls.row.aiv-cdn.net", "*avodhlss3ww-a.akamaihd.net", "s3.amazonaws.com", "cf-timedtext.aux.pv-cdn.net",

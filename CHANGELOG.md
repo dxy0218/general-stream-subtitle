@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.5.4
+
+- Remove shared Apple Music/Apple TV hosts from the default MITM list to prevent Apple Music certificate validation errors.
+
 ## 0.5.3
 
 - Match all responses on known Max and Discovery playback hosts so opaque and GraphQL playback paths reach the content-aware manifest adapter.

@@ -126,6 +126,8 @@ test("generated modules isolate Pluto and add Paramount Live rules", () => {
     assert.match(content, /discomax\\\.com/);
     assert.match(content, /uplynk\\\.com/);
     assert.doesNotMatch(content, /hostname = .*\*\.pluto\.tv/);
+    assert.doesNotMatch(content, /hostname = .*\*\.itunes\.apple\.com/);
+    assert.doesNotMatch(content, /hostname = .*\*\.tv\.apple\.com/);
     assert.match(content, /service-stitcher\.clusters\.pluto\.tv/);
   }
 });
