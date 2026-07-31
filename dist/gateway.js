@@ -1668,7 +1668,10 @@ GSS.Subtitle = {
     var format = GSS.Formats.detect(body, url, contentType, config);
     if (!format) { callback(new Error("Unsupported subtitle format")); return; }
     var cache = GSS.Cache(config, logger);
-    var seed = body + "|" + format.id + "|" + mode + "|" + source + "|" + target + "|" + config.bilingualOrder + "|" + config.provider + "|" + config.fallbackProviders;
+    // Rendered subtitle output depends on parser behavior. Including the module
+    // version prevents a fixed release from reusing malformed output cached by
+    // an older renderer.
+    var seed = GSS.VERSION + "|" + body + "|" + format.id + "|" + mode + "|" + source + "|" + target + "|" + config.bilingualOrder + "|" + config.provider + "|" + config.fallbackProviders;
     var cached = cache.get(seed);
     if (cached !== null) { callback(null, cached, true, format); return; }
     var parsed;
