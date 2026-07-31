@@ -177,6 +177,20 @@ test("generated modules isolate Pluto and add Paramount Live rules", () => {
   }
 });
 
+test("Shadowrocket declares choices for every editable module parameter", () => {
+  const content = fs.readFileSync(path.join(root, "modules", "GeneralStreamSubtitle.module"), "utf8");
+  const argumentLine = content.split("\n").find((line) => line.startsWith("#!arguments="));
+  const descriptionLine = content.split("\n").find((line) => line.startsWith("#!arguments-desc="));
+  const names = argumentLine.slice("#!arguments=".length).split(",").map((entry) => entry.trim().split(":")[0]);
+  assert.equal(names.length, 16);
+  for (const name of names) assert.match(descriptionLine, new RegExp(`${name}: \\[`));
+  assert.match(descriptionLine, /SOURCE: \[auto, en, ja, ko/);
+  assert.match(descriptionLine, /PROVIDER: \[google-free, google-cloud, deepl/);
+  assert.match(descriptionLine, /DISCOVERY_MODE: \[full, hls-only, off\]/);
+  assert.match(descriptionLine, /YT_STRATEGY: \[direct, virtual\]/);
+  assert.match(descriptionLine, /DEBUG: \[false, true\]/);
+});
+
 test("generated rules keep Max broad but restrict Discovery to media hosts", () => {
   const content = fs.readFileSync(path.join(root, "modules", "GeneralStreamSubtitle.plugin"), "utf8");
   const generalLine = content.split("\n").find((line) => line.includes("tag=GSS Manifest,"));

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.5.7
+
+- Declare a complete candidate list for every Shadowrocket module parameter so supported clients can render choice controls instead of requiring manually typed values.
+- Add presets for source/target languages, track names, providers, platforms, formats, Discovery compatibility, YouTube behavior, ordering, caching, and diagnostics.
+
 ## 0.5.6
 
 - Add `DISCOVERY_MODE=full|hls-only|off` for Apple TV compatibility isolation without clearing saved provider settings.

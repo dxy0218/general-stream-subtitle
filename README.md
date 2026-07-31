@@ -282,6 +282,8 @@ http://127.0.0.1:6170/gss/
 
 Shadowrocket 和 Surge 可以直接编辑常用模块参数。Loon 建议通过 `gss.local` 管理页面配置。
 
+Shadowrocket 模块从 v0.5.7 起为全部编辑参数声明候选值。更新模块后，在“编辑参数”中直接选择语言、平台、Provider、Discovery 兼容模式等预设；需要任意自定义值时仍可在 `http://gss.local/` 中保存。
+
 | 模块参数 | 默认值 | 说明 |
 |---|---|---|
 | `SOURCE` | `auto` | 源语言；也可以填 `en`、`ja`、`ko` 等 |
