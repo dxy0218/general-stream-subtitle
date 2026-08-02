@@ -1,4 +1,4 @@
-// General Stream Subtitle 0.6.8 - manifest
+// General Stream Subtitle 0.6.9 - manifest
 // MIT License - generated file; edit src/ instead.
 (function () {
 "use strict";
@@ -251,7 +251,7 @@ GSS.Language = (function createLanguageTools() {
   };
 })();
 
-GSS.VERSION = "0.6.8";
+GSS.VERSION = "0.6.9";
 GSS.SETTINGS_KEY = "GSS_SETTINGS_V4";
 GSS.PROVIDER_SECRETS_KEY = "GSS_PROVIDER_SECRETS_V1";
 GSS.ADMIN_TOKEN_KEY = "GSS_ADMIN_TOKEN_V1";
@@ -1297,6 +1297,13 @@ GSS.M3U8 = (function createM3U8Tools() {
     attributes.push({ key: key, value: value, quoted: quoted });
   }
 
+  function remove(attributes, key) {
+    var upper = key.toUpperCase();
+    for (var i = attributes.length - 1; i >= 0; i -= 1) {
+      if (attributes[i].key.toUpperCase() === upper) attributes.splice(i, 1);
+    }
+  }
+
   function serialize(tag, attributes) {
     return tag + ":" + attributes.map(function (attribute) {
       var value = attribute.quoted ? '"' + String(attribute.value).replace(/"/g, "") + '"' : attribute.value;
@@ -1351,13 +1358,25 @@ GSS.M3U8 = (function createM3U8Tools() {
     var absoluteOrigin = GSS.Url.resolve(requestUrl, originalUri);
     var name = mode === "bilingual" ? config.trackName : config.translatedTrackName;
     var source = GSS.Language.googleSource(candidate.language, config.source);
+    var renditionLanguage = config.target;
+    if (platform && platform.id === "max") {
+      if (/^(?:zh-cn|zh-hans)$/i.test(renditionLanguage)) renditionLanguage = "zh-Hans";
+      else if (/^(?:zh-tw|zh-hk|zh-mo|zh-hant)$/i.test(renditionLanguage)) renditionLanguage = "zh-Hant";
+    }
     set(attributes, "NAME", name, true);
-    set(attributes, "LANGUAGE", config.target, true);
+    set(attributes, "LANGUAGE", renditionLanguage, true);
     set(attributes, "DEFAULT", "NO", false);
-    // Allow tvOS to restore the user's explicit Chinese selection after a
-    // multivariant playlist refresh without ever making it the default track.
-    set(attributes, "AUTOSELECT", "YES", false);
+    // Max/tvOS re-evaluates AUTOSELECT renditions after loading their first
+    // subtitle segment. Keep the synthetic track explicit-only so that the
+    // app does not replace or remove the user's manual selection.
+    set(attributes, "AUTOSELECT", platform && platform.id === "max" ? "NO" : "YES", false);
     set(attributes, "FORCED", "NO", false);
+    if (platform && platform.id === "max") {
+      // These describe the source CC rendition, not the translated duplicate,
+      // and can make Max's custom media-selection UI reject the new language.
+      remove(attributes, "ASSOC-LANGUAGE");
+      remove(attributes, "CHARACTERISTICS");
+    }
     var sourceStableId = get(attributes, "STABLE-RENDITION-ID");
     if (sourceStableId) {
       // The source stable ID is intentionally independent of the selected CDN.
@@ -1383,12 +1402,26 @@ GSS.M3U8 = (function createM3U8Tools() {
   }
 
   function inspectTrackTypes(lines) {
-    var summary = { subtitles: 0, closedCaptions: 0, subtitleUris: 0 };
+    var summary = { subtitles: 0, closedCaptions: 0, subtitleUris: 0, renditions: [] };
     lines.forEach(function (line) {
       if (line.indexOf("#EXT-X-MEDIA:") !== 0) return;
       var attributes = parseAttributes(line);
       var type = String(get(attributes, "TYPE") || "").toUpperCase();
-      if (type === "SUBTITLES") { summary.subtitles += 1; if (get(attributes, "URI")) summary.subtitleUris += 1; }
+      if (type === "SUBTITLES") {
+        summary.subtitles += 1;
+        if (get(attributes, "URI")) summary.subtitleUris += 1;
+        if (summary.renditions.length < 8) summary.renditions.push({
+          group: String(get(attributes, "GROUP-ID") || ""),
+          name: String(get(attributes, "NAME") || ""),
+          language: String(get(attributes, "LANGUAGE") || ""),
+          default: String(get(attributes, "DEFAULT") || ""),
+          autoselect: String(get(attributes, "AUTOSELECT") || ""),
+          forced: String(get(attributes, "FORCED") || ""),
+          stableId: get(attributes, "STABLE-RENDITION-ID") ? "present" : "absent",
+          assocLanguage: String(get(attributes, "ASSOC-LANGUAGE") || ""),
+          characteristics: String(get(attributes, "CHARACTERISTICS") || "")
+        });
+      }
       if (type === "CLOSED-CAPTIONS") summary.closedCaptions += 1;
     });
     return summary;
@@ -1617,6 +1650,11 @@ GSS.MPD = (function createMpdTools() {
       var media = GSS.M3U8.isMediaPlaylist(body);
       var summary = GSS.M3U8.inspectTrackTypes(body.replace(/\r\n/g, "\n").split("\n"));
       output = GSS.M3U8.injectTracks(body, requestUrl, config, logger, platform);
+      if (output !== body) {
+        var outputSummary = GSS.M3U8.inspectTrackTypes(output.replace(/\r\n/g, "\n").split("\n"));
+        summary.outputSubtitles = outputSummary.subtitles;
+        summary.outputRenditions = outputSummary.renditions;
+      }
       contentType = "application/vnd.apple.mpegurl; charset=utf-8";
       record(platform, media ? "hls-media" : "hls-master", output !== body, summary, output !== body ? "rewritten" : "unchanged");
     } else if (processingMode === "hls-only") {

@@ -76,7 +76,7 @@ test("gives injected Apple subtitle tracks a unique stable rendition id", () => 
   assert.match(ids[1],/^gss-[0-9a-f]+$/);
 });
 
-test("keeps an injected rendition stable across Max CDN refreshes", () => {
+test("keeps an explicit Apple-compatible Max rendition stable across CDN refreshes", () => {
   const { GSS } = load(core);
   const body = [
     "#EXTM3U",
@@ -93,10 +93,31 @@ test("keeps an injected rendition stable across Max CDN refreshes", () => {
     const output = GSS.M3U8.injectTracks(body, url, GSS.DEFAULTS, {info(){}}, {id:"max"});
     const lines = output.split("\n").filter((line) => /NAME="Translate-zh"/.test(line));
     assert.equal(lines.length, 1);
-    assert.match(lines[0], /AUTOSELECT=YES/);
+    assert.match(lines[0], /LANGUAGE="zh-Hans"/);
+    assert.match(lines[0], /AUTOSELECT=NO/);
     return lines[0].match(/STABLE-RENDITION-ID="([^"]+)"/)[1];
   });
   assert.equal(new Set(ids).size, 1);
+});
+
+test("removes source-only association metadata from a translated Max rendition", () => {
+  const { GSS } = load(core);
+  const body = [
+    "#EXTM3U",
+    '#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="English CC",LANGUAGE="en",ASSOC-LANGUAGE="en",CHARACTERISTICS="public.accessibility.transcribes-spoken-dialog",DEFAULT=YES,AUTOSELECT=YES,FORCED=NO,URI="subs/en.m3u8"',
+    '#EXT-X-STREAM-INF:BANDWIDTH=1000000,SUBTITLES="subs"',
+    "video/main.m3u8"
+  ].join("\n");
+  const output = GSS.M3U8.injectTracks(body,"https://gcp.prd.media.h264.io/title/hls.m3u8",GSS.DEFAULTS,{info(){}},{id:"max"});
+  const translated = output.split("\n").find((line) => /NAME="Translate-zh"/.test(line));
+  assert.match(translated,/LANGUAGE="zh-Hans"/);
+  assert.match(translated,/AUTOSELECT=NO/);
+  assert.doesNotMatch(translated,/ASSOC-LANGUAGE/);
+  assert.doesNotMatch(translated,/CHARACTERISTICS/);
+  const details = GSS.M3U8.inspectTrackTypes(output.split("\n"));
+  assert.equal(details.outputSubtitles,undefined);
+  assert.equal(details.renditions[1].language,"zh-Hans");
+  assert.equal(details.renditions[1].autoselect,"NO");
 });
 
 test("optionally injects a pure translated track", () => {

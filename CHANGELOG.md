@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.6.9
+
+- Mark injected Max translations as explicit-only `zh-Hans`/`zh-Hant` renditions for Apple media selection.
+- Remove source CC association and accessibility characteristics from translated Max duplicates.
+- Record safe source/output HLS rendition attributes in diagnostics for device-specific selection failures.
+
 ## 0.6.8
 
 - Remove stale standard and cloud-vendor entity validators from rewritten subtitle responses.

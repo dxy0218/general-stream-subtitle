@@ -38,6 +38,11 @@
       var media = GSS.M3U8.isMediaPlaylist(body);
       var summary = GSS.M3U8.inspectTrackTypes(body.replace(/\r\n/g, "\n").split("\n"));
       output = GSS.M3U8.injectTracks(body, requestUrl, config, logger, platform);
+      if (output !== body) {
+        var outputSummary = GSS.M3U8.inspectTrackTypes(output.replace(/\r\n/g, "\n").split("\n"));
+        summary.outputSubtitles = outputSummary.subtitles;
+        summary.outputRenditions = outputSummary.renditions;
+      }
       contentType = "application/vnd.apple.mpegurl; charset=utf-8";
       record(platform, media ? "hls-media" : "hls-master", output !== body, summary, output !== body ? "rewritten" : "unchanged");
     } else if (processingMode === "hls-only") {
