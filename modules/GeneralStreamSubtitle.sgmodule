@@ -1,5 +1,5 @@
 #!name=General Stream Subtitle
-#!desc=多平台 HLS/DASH、多字幕格式、多翻译引擎（v0.6.7）
+#!desc=多平台 HLS/DASH、多字幕格式、多翻译引擎（v0.6.8）
 #!author=dxy0218 & contributors
 #!homepage=https://github.com/dxy0218/general-stream-subtitle
 #!arguments=SOURCE=auto&TARGET=zh-CN&TRACK_NAME=Translate-zh&PROVIDER=google-free&PLATFORMS=all&DISCOVERY_MODE=full&FORMATS=all&GENERIC=false&YT_STRATEGY=direct&YT_ASR=true&YT_LIVE=true&YT_MANUAL=true&PURE_TRACK=false&ORDER=translation-first&CACHE=true&LOGS=true&DEBUG=false

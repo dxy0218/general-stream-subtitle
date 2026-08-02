@@ -17,7 +17,11 @@ GSS.Runtime = (function createRuntime() {
     Object.keys(copy).forEach(function (key) {
       var lower = key.toLowerCase();
       if (lower === "content-length" || lower === "content-encoding" || lower === "transfer-encoding"
-        || lower === "content-md5" || lower === "digest" || lower === "etag") delete copy[key];
+        || lower === "content-md5" || lower === "digest" || lower === "etag"
+        || lower === "last-modified" || lower === "content-range" || lower === "accept-ranges"
+        || /^x-goog-(?:hash|generation|metageneration|stored-content-|source-etag)/.test(lower)
+        || /^x-amz-(?:checksum-|version-id|meta-etag)/.test(lower)
+        || /^x-ms-content-(?:crc64|md5)$/.test(lower)) delete copy[key];
       if (contentType && lower === "content-type") delete copy[key];
     });
     if (contentType) copy["Content-Type"] = contentType;

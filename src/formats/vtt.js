@@ -67,7 +67,16 @@ GSS.VTT = (function createVTTTools() {
     return lines.join("\n");
   }
 
-  return { parse: parse, uniqueTexts: uniqueTexts, render: render, stripTags: stripTags, isTimestampLine: isTimestampLine };
+  function validate(body, expectedCues) {
+    var text = String(body || "").replace(/^\uFEFF/, "");
+    var headerValid = /^WEBVTT(?:[ \t].*)?(?:\r?\n|$)/.test(text);
+    var parsed = parse(text);
+    var cueCount = parsed.cues.length;
+    var cueCountValid = expectedCues === undefined || expectedCues === null || cueCount === expectedCues;
+    return { valid: headerValid && cueCountValid, headerValid: headerValid, cueCount: cueCount, cueCountValid: cueCountValid };
+  }
+
+  return { parse: parse, uniqueTexts: uniqueTexts, render: render, validate: validate, stripTags: stripTags, isTimestampLine: isTimestampLine };
 })();
 
 GSS.Formats.register("vtt", {

@@ -1,4 +1,4 @@
-// General Stream Subtitle 0.6.7 - youtube-caption
+// General Stream Subtitle 0.6.8 - youtube-caption
 // MIT License - generated file; edit src/ instead.
 (function () {
 "use strict";
@@ -22,7 +22,11 @@ GSS.Runtime = (function createRuntime() {
     Object.keys(copy).forEach(function (key) {
       var lower = key.toLowerCase();
       if (lower === "content-length" || lower === "content-encoding" || lower === "transfer-encoding"
-        || lower === "content-md5" || lower === "digest" || lower === "etag") delete copy[key];
+        || lower === "content-md5" || lower === "digest" || lower === "etag"
+        || lower === "last-modified" || lower === "content-range" || lower === "accept-ranges"
+        || /^x-goog-(?:hash|generation|metageneration|stored-content-|source-etag)/.test(lower)
+        || /^x-amz-(?:checksum-|version-id|meta-etag)/.test(lower)
+        || /^x-ms-content-(?:crc64|md5)$/.test(lower)) delete copy[key];
       if (contentType && lower === "content-type") delete copy[key];
     });
     if (contentType) copy["Content-Type"] = contentType;
@@ -247,7 +251,7 @@ GSS.Language = (function createLanguageTools() {
   };
 })();
 
-GSS.VERSION = "0.6.7";
+GSS.VERSION = "0.6.8";
 GSS.SETTINGS_KEY = "GSS_SETTINGS_V4";
 GSS.PROVIDER_SECRETS_KEY = "GSS_PROVIDER_SECRETS_V1";
 GSS.ADMIN_TOKEN_KEY = "GSS_ADMIN_TOKEN_V1";
@@ -941,7 +945,16 @@ GSS.VTT = (function createVTTTools() {
     return lines.join("\n");
   }
 
-  return { parse: parse, uniqueTexts: uniqueTexts, render: render, stripTags: stripTags, isTimestampLine: isTimestampLine };
+  function validate(body, expectedCues) {
+    var text = String(body || "").replace(/^\uFEFF/, "");
+    var headerValid = /^WEBVTT(?:[ \t].*)?(?:\r?\n|$)/.test(text);
+    var parsed = parse(text);
+    var cueCount = parsed.cues.length;
+    var cueCountValid = expectedCues === undefined || expectedCues === null || cueCount === expectedCues;
+    return { valid: headerValid && cueCountValid, headerValid: headerValid, cueCount: cueCount, cueCountValid: cueCountValid };
+  }
+
+  return { parse: parse, uniqueTexts: uniqueTexts, render: render, validate: validate, stripTags: stripTags, isTimestampLine: isTimestampLine };
 })();
 
 GSS.Formats.register("vtt", {

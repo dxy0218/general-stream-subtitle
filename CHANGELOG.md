@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.6.8
+
+- Remove stale standard and cloud-vendor entity validators from rewritten subtitle responses.
+- Prevent tvOS from caching rewritten playlists and WebVTT bodies under origin CDN metadata.
+- Validate the translated WebVTT header and cue count before returning it, and expose safe validation counts in diagnostics.
+
 ## 0.6.7
 
 - Convert Max byte-range WebVTT playlists into standalone virtual subtitle segments before translation.

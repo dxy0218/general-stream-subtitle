@@ -50,3 +50,16 @@ test("WebVTT cue identifiers never become translated cue text", () => {
   assert.equal((output.match(/^2$/gm) || []).length, 1);
   assert.match(output, /X-TIMESTAMP-MAP=MPEGTS:900000/);
 });
+
+test("validates the WebVTT header and preserves the cue count", () => {
+  const GSS = load();
+  const body = fs.readFileSync(path.join(root,"tests/fixtures/sample.vtt"),"utf8");
+  const parsed = GSS.VTT.parse(body);
+  const valid = GSS.VTT.validate(body, parsed.cues.length);
+  assert.equal(valid.valid, true);
+  assert.equal(valid.headerValid, true);
+  assert.equal(valid.cueCount, parsed.cues.length);
+  assert.equal(valid.cueCountValid, true);
+  assert.equal(GSS.VTT.validate(body.replace(/^WEBVTT/, "INVALID"), parsed.cues.length).valid, false);
+  assert.equal(GSS.VTT.validate(body, parsed.cues.length + 1).valid, false);
+});

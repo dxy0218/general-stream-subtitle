@@ -45,6 +45,12 @@
   function deleteHeader(headers, name) {
     Object.keys(headers || {}).forEach(function (key) { if (key.toLowerCase() === name.toLowerCase()) delete headers[key]; });
   }
+  function rewrittenResponseHeaders(response, contentType) {
+    var headers = GSS.Runtime.cleanHeaders(upstreamHeaders(response), contentType);
+    setHeader(headers, "Cache-Control", "no-store, no-cache, must-revalidate");
+    setHeader(headers, "Pragma", "no-cache");
+    return headers;
+  }
   function upstreamRequestHeaders(platform, forceFullBody) {
     var headers = {};
     Object.keys(GSS.Runtime.request.headers || {}).forEach(function (key) { headers[key] = GSS.Runtime.request.headers[key]; });
@@ -108,7 +114,7 @@
         if (path === "/playlist" && body.indexOf("#EXTM3U") >= 0) {
           var playlist = GSS.M3U8.decorateSubtitlePlaylist(body, origin, mode, source, target, config, logger, platform);
           trace("subtitle-playlist", playlist === body ? "unchanged" : "rewritten", { bodySize: String(body).length }, "info", origin);
-          GSS.Runtime.doneResponse(200, GSS.Runtime.cleanHeaders(upstreamHeaders(response), "application/vnd.apple.mpegurl; charset=utf-8"), playlist);
+          GSS.Runtime.doneResponse(200, rewrittenResponseHeaders(response, "application/vnd.apple.mpegurl; charset=utf-8"), playlist);
           return;
         }
         if (path === "/subtitle" || path === "/playlist" || path === "/youtube") {
@@ -117,8 +123,21 @@
           GSS.Subtitle.translateBody(body, origin, upstreamType, mode, source, target, config, logger, function (translateError, translated, changed, format) {
             if (translateError) { originalResponse("translation failed: " + String(translateError), body, response, upstreamType); return; }
             var contentType = format.contentTypeFor ? format.contentTypeFor(translated, upstreamType) : format.contentType;
-            trace("subtitle-translation", changed ? "rewritten" : "unchanged", { format: format.id, mode: mode, source: source, target: target, inputSize: String(body).length, outputSize: String(translated).length }, "info", origin);
-            GSS.Runtime.doneResponse(200, GSS.Runtime.cleanHeaders(upstreamHeaders(response), contentType), translated);
+            var validation = null;
+            if (format.id === "vtt" && GSS.VTT && GSS.VTT.validate) {
+              var inputCues = GSS.VTT.parse(body).cues.length;
+              validation = GSS.VTT.validate(translated, inputCues);
+              if (!validation.valid) { originalResponse("translated WebVTT validation failed", body, response, upstreamType); return; }
+              validation.inputCues = inputCues;
+            }
+            trace("subtitle-translation", changed ? "rewritten" : "unchanged", {
+              format: format.id, mode: mode, source: source, target: target,
+              inputSize: String(body).length, outputSize: String(translated).length,
+              inputCues: validation ? validation.inputCues : undefined,
+              outputCues: validation ? validation.cueCount : undefined,
+              valid: validation ? validation.valid : undefined
+            }, "info", origin);
+            GSS.Runtime.doneResponse(200, rewrittenResponseHeaders(response, contentType), translated);
           });
           return;
         }

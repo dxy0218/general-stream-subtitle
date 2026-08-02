@@ -44,13 +44,22 @@ test("gateway translates WebVTT through Google free provider", () => {
   const origin="https://cdn.max.com/sub/1.vtt?token=abc";
   run("dist/gateway.js",{
     $request:{url:"https://gss.local/subtitle?origin="+encodeURIComponent(origin)+"&mode=bilingual&source=en&target=zh-CN&platform=max",headers:{"User-Agent":"Max"}},
-    $httpClient:{get(options,cb){calls++; if(options.url===origin) cb(null,{status:200,headers:{"Content-Type":"text/vtt"}},vtt); else cb(null,{status:200},JSON.stringify([[['[[GSS_0000]]\n你好。\n[[GSS_0001]]\n你好吗？','',null,null]]]));}},
+    $httpClient:{get(options,cb){calls++; if(options.url===origin) cb(null,{status:200,headers:{
+      "Content-Type":"text/vtt","Content-Length":"999","Last-Modified":"yesterday","Accept-Ranges":"bytes",
+      "x-goog-stored-content-length":"999","x-goog-hash":"md5=stale","Cache-Control":"public,max-age=7776000"
+    }},vtt); else cb(null,{status:200},JSON.stringify([[['[[GSS_0000]]\n你好。\n[[GSS_0001]]\n你好吗？','',null,null]]]));}},
     $persistentStore:{read(k){return store.get(k)||null;},write(v,k){store.set(k,v);return true;}},
     $done(p){result=p;}
   });
   assert.ok(calls>=2);
   assert.match(result.response.body,/你好。\nHello there\./);
   assert.match(result.response.body,/你好吗？\n<v Speaker>How are you\?<\/v>/);
+  assert.equal(result.response.headers["Content-Length"],undefined);
+  assert.equal(result.response.headers["Last-Modified"],undefined);
+  assert.equal(result.response.headers["Accept-Ranges"],undefined);
+  assert.equal(result.response.headers["x-goog-stored-content-length"],undefined);
+  assert.equal(result.response.headers["x-goog-hash"],undefined);
+  assert.equal(result.response.headers["Cache-Control"],"no-store, no-cache, must-revalidate");
 });
 
 test("Max standalone VTT gateway ignores the stale playlist byte range", () => {
