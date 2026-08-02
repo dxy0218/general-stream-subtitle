@@ -73,10 +73,13 @@ const forceHttpHosts = [
   "*.hls.pv-cdn.net", "*.hls.row.aiv-cdn.net", "*avodhlss3ww-a.akamaihd.net", "cf-timedtext.aux.pv-cdn.net",
   "d1v5ir2lpwr8os.cloudfront.net", "d22qjgkvxw22r6.cloudfront.net", "d25xi40x97liuc.cloudfront.net", "d27xxe7juh1us6.cloudfront.net", "dmqdd6hw24ucf.cloudfront.net"
 ].join(", ");
-const manifestUrl = `${rawBase}/dist/manifest.js`;
-const gatewayUrl = `${rawBase}/dist/gateway.js`;
-const youtubeUrl = `${rawBase}/dist/youtube.js`;
-const youtubeCaptionUrl = `${rawBase}/dist/youtube-caption.js`;
+// Proxy clients cache each remote script independently from the module file.
+// Change the runtime URL on every release so all bundles refresh together.
+const runtimeVersion = encodeURIComponent(pkg.version);
+const manifestUrl = `${rawBase}/dist/manifest.js?v=${runtimeVersion}`;
+const gatewayUrl = `${rawBase}/dist/gateway.js?v=${runtimeVersion}`;
+const youtubeUrl = `${rawBase}/dist/youtube.js?v=${runtimeVersion}`;
+const youtubeCaptionUrl = `${rawBase}/dist/youtube-caption.js?v=${runtimeVersion}`;
 const defaultArgs = "source=auto&target=zh-CN&trackName=Translate-zh&provider=google-free&platforms=all&discoveryMode=full&safePlayback=false&formats=all&genericMode=false&youtubeStrategy=direct&youtubeUseAsr=true&youtubeLive=true&youtubePreferManual=true&injectTranslated=false&bilingualOrder=translation-first&cacheEnabled=true&logEnabled=true&debug=false";
 const surgeArgs = "source=%SOURCE%&target=%TARGET%&trackName=%TRACK_NAME%&provider=%PROVIDER%&platforms=%PLATFORMS%&discoveryMode=%DISCOVERY_MODE%&formats=%FORMATS%&genericMode=%GENERIC%&youtubeStrategy=%YT_STRATEGY%&youtubeUseAsr=%YT_ASR%&youtubeLive=%YT_LIVE%&youtubePreferManual=%YT_MANUAL%&injectTranslated=%PURE_TRACK%&bilingualOrder=%ORDER%&cacheEnabled=%CACHE%&logEnabled=%LOGS%&debug=%DEBUG%";
 const shadowArgs = "presetMode=true&safePlayback=true&hyMt2Preset={{{HY_MT2}}}&platformDiscovery={{{DISCOVERY}}}&discoveryHlsOnly={{{DISCOVERY_HLS_ONLY}}}&platformMax={{{MAX}}}&platformPluto={{{PLUTO}}}&platformPrime={{{PRIME}}}&platformHulu={{{HULU}}}&platformYoutube={{{YOUTUBE}}}&youtubeUseAsr={{{YT_ASR}}}&youtubeLive={{{YT_LIVE}}}&injectTranslated={{{PURE_TRACK}}}&cacheEnabled={{{CACHE}}}&logEnabled={{{LOGS}}}&debug={{{DEBUG}}}";

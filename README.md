@@ -4,7 +4,7 @@
 
 项目通过 HTTPS MITM 读取播放器清单、播放器响应或文本字幕，在原有字幕菜单中加入一个可见的 **`Translate-zh`** 轨道。只有当用户选择该轨道后，模块才获取原字幕、调用翻译 Provider，并返回双语或纯翻译字幕。
 
-> 当前版本：**v0.6.9**
+> 当前版本：**v0.6.10**
 > 支持系统：iOS、iPadOS、macOS、tvOS（具体能力取决于代理客户端与流媒体 App）  
 > 开源协议：MIT
 
@@ -435,6 +435,12 @@ cdn.example.net
 ```
 
 ## 版本更新记录
+
+### v0.6.10 — Shadowrocket 脚本缓存刷新
+
+- 所有远程 runtime URL 加入版本参数，避免 Shadowrocket 在模块更新后继续使用旧 `manifest.js`。
+- 确保 Manifest、Gateway、YouTube 与 YouTube Caption 始终来自同一版本。
+- 修复模块标题已更新但主清单仍运行旧逻辑、导致日志缺少 `renditions` / `outputRenditions` 的问题。
 
 ### v0.6.9 — Max / tvOS 字幕轨选择兼容
 

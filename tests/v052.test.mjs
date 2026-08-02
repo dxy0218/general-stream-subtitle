@@ -340,3 +340,15 @@ test("generated rules match media manifests and bypass account, session, GraphQL
   assert.equal(pluto.test("https://service-stitcher.clusters.pluto.tv/v1/stitch/embed/hls/channel/demo/master.m3u8"), true);
   assert.equal(pluto.test("https://api.pluto.tv/v2/session"), false);
 });
+
+test("generated module runtime URLs are cache-busted by package version", () => {
+  const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+  for (const filename of ["GeneralStreamSubtitle.module", "GeneralStreamSubtitle.plugin", "GeneralStreamSubtitle.sgmodule"]) {
+    const content = fs.readFileSync(path.join(root, "modules", filename), "utf8");
+    for (const bundle of ["manifest", "gateway", "youtube", "youtube-caption"]) {
+      if (!content.includes(`/dist/${bundle}.js`)) continue;
+      const escapedVersion = pkg.version.replace(/\./g, "\\.");
+      assert.match(content, new RegExp(`/dist/${bundle}\\.js\\?v=${escapedVersion}`));
+    }
+  }
+});

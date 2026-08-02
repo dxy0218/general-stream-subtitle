@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.6.10
+
+- Add the package version to every generated remote runtime URL so proxy clients cannot mix cached manifest, Gateway and YouTube bundles from different releases.
+- Ensure a Shadowrocket module update actually loads the latest Max rendition compatibility code and matching diagnostics.
+
 ## 0.6.9
 
 - Mark injected Max translations as explicit-only `zh-Hans`/`zh-Hant` renditions for Apple media selection.
