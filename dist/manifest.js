@@ -1,4 +1,4 @@
-// General Stream Subtitle 0.6.10 - manifest
+// General Stream Subtitle 0.6.11 - manifest
 // MIT License - generated file; edit src/ instead.
 (function () {
 "use strict";
@@ -251,7 +251,7 @@ GSS.Language = (function createLanguageTools() {
   };
 })();
 
-GSS.VERSION = "0.6.10";
+GSS.VERSION = "0.6.11";
 GSS.SETTINGS_KEY = "GSS_SETTINGS_V4";
 GSS.PROVIDER_SECRETS_KEY = "GSS_PROVIDER_SECRETS_V1";
 GSS.ADMIN_TOKEN_KEY = "GSS_ADMIN_TOKEN_V1";
@@ -276,6 +276,7 @@ GSS.DEFAULTS = {
   platforms: "all",
   discoveryMode: "full",
   safePlayback: false,
+  maxReplaceSource: false,
   presetMode: false,
   hyMt2Preset: false,
   platformDiscovery: false,
@@ -327,7 +328,7 @@ GSS.allowedSettings = {
   providerModel: "string", providerRegion: "string", providerProject: "string", providerLocation: "string",
   providerPrompt: "string", source: "string", sourcePriority: "string", target: "string", trackName: "string",
   injectTranslated: "boolean", translatedTrackName: "string", bilingualOrder: "string", platforms: "string", discoveryMode: "string",
-  safePlayback: "boolean", presetMode: "boolean", hyMt2Preset: "boolean", platformDiscovery: "boolean", discoveryHlsOnly: "boolean",
+  safePlayback: "boolean", maxReplaceSource: "boolean", presetMode: "boolean", hyMt2Preset: "boolean", platformDiscovery: "boolean", discoveryHlsOnly: "boolean",
   platformMax: "boolean", platformPluto: "boolean", platformPrime: "boolean", platformHulu: "boolean", platformYoutube: "boolean",
   formats: "string", genericMode: "boolean", customDomains: "string", youtubeStrategy: "string",
   youtubeUseAsr: "boolean", youtubeLive: "boolean", youtubePreferManual: "boolean", logEnabled: "boolean", debug: "boolean", cacheEnabled: "boolean",
@@ -436,6 +437,9 @@ GSS.getConfig = function getConfig() {
     config.logEnabled = args.logEnabled !== false;
     config.debug = !!args.debug;
     config.safePlayback = true;
+    // Max/tvOS removes synthetic subtitle renditions after selection. Keep the
+    // trusted source rendition and route its URI through bilingual translation.
+    config.maxReplaceSource = args.maxReplaceSource !== false;
     config.presetMode = true;
     config.hyMt2Preset = useHyMt2;
   }
@@ -1401,15 +1405,37 @@ GSS.M3U8 = (function createM3U8Tools() {
     return serialize(tag, attributes);
   }
 
+  function virtualizeSourceTrack(candidate, requestUrl, config, platform) {
+    var tag = candidate.line.slice(0, candidate.line.indexOf(":"));
+    var attributes = parseAttributes(candidate.line);
+    var originalUri = get(attributes, "URI");
+    if (!originalUri) return null;
+    // Preserve every identity and selection attribute exactly as Max supplied
+    // it. Only the media URI changes, so the app continues to trust this as its
+    // original en-US CC rendition while the Gateway returns bilingual VTT.
+    set(attributes, "URI", GSS.Url.virtual(config.virtualOrigin, "/playlist", {
+      origin: GSS.Url.resolve(requestUrl, originalUri),
+      mode: "bilingual",
+      source: GSS.Language.googleSource(candidate.language, config.source),
+      target: config.target,
+      platform: platform ? platform.id : "unknown",
+      strategy: "replace-source",
+      version: GSS.VERSION
+    }), true);
+    return serialize(tag, attributes);
+  }
+
   function inspectTrackTypes(lines) {
-    var summary = { subtitles: 0, closedCaptions: 0, subtitleUris: 0, renditions: [] };
+    var summary = { subtitles: 0, closedCaptions: 0, subtitleUris: 0, virtualSubtitleUris: 0, renditions: [] };
     lines.forEach(function (line) {
       if (line.indexOf("#EXT-X-MEDIA:") !== 0) return;
       var attributes = parseAttributes(line);
       var type = String(get(attributes, "TYPE") || "").toUpperCase();
       if (type === "SUBTITLES") {
         summary.subtitles += 1;
-        if (get(attributes, "URI")) summary.subtitleUris += 1;
+        var uri = String(get(attributes, "URI") || "");
+        if (uri) summary.subtitleUris += 1;
+        if (/(?:gss\.local|example\.com)\/playlist/.test(uri)) summary.virtualSubtitleUris += 1;
         if (summary.renditions.length < 8) summary.renditions.push({
           group: String(get(attributes, "GROUP-ID") || ""),
           name: String(get(attributes, "NAME") || ""),
@@ -1419,7 +1445,8 @@ GSS.M3U8 = (function createM3U8Tools() {
           forced: String(get(attributes, "FORCED") || ""),
           stableId: get(attributes, "STABLE-RENDITION-ID") ? "present" : "absent",
           assocLanguage: String(get(attributes, "ASSOC-LANGUAGE") || ""),
-          characteristics: String(get(attributes, "CHARACTERISTICS") || "")
+          characteristics: String(get(attributes, "CHARACTERISTICS") || ""),
+          virtual: /(?:gss\.local|example\.com)\/playlist/.test(uri)
         });
       }
       if (type === "CLOSED-CAPTIONS") summary.closedCaptions += 1;
@@ -1462,9 +1489,16 @@ GSS.M3U8 = (function createM3U8Tools() {
     }
 
     var output = [], injected = 0;
+    var replaceSource = !!(config.maxReplaceSource && platform && platform.id === "max");
     lines.forEach(function (line, index) {
+      if (index !== selected.index) { output.push(line); return; }
+      if (replaceSource) {
+        var replacement = virtualizeSourceTrack(selected, requestUrl, config, platform);
+        output.push(replacement || line);
+        if (replacement) injected += 1;
+        return;
+      }
       output.push(line);
-      if (index !== selected.index) return;
       var bilingual = duplicateTrack(selected, requestUrl, "bilingual", config, platform);
       if (bilingual) { output.push(bilingual); injected += 1; }
       if (config.injectTranslated) {
@@ -1478,7 +1512,8 @@ GSS.M3U8 = (function createM3U8Tools() {
       trackName: config.trackName,
       selectedName: selected.name,
       selectedLanguage: selected.language || "auto",
-      configuredSource: config.source
+      configuredSource: config.source,
+      strategy: replaceSource ? "replace-source" : "duplicate"
     });
     return injected ? output.join("\n") : body;
   }
@@ -1653,7 +1688,9 @@ GSS.MPD = (function createMpdTools() {
       if (output !== body) {
         var outputSummary = GSS.M3U8.inspectTrackTypes(output.replace(/\r\n/g, "\n").split("\n"));
         summary.outputSubtitles = outputSummary.subtitles;
+        summary.outputVirtualSubtitleUris = outputSummary.virtualSubtitleUris;
         summary.outputRenditions = outputSummary.renditions;
+        summary.strategy = platform.id === "max" && config.maxReplaceSource ? "replace-source" : "duplicate";
       }
       contentType = "application/vnd.apple.mpegurl; charset=utf-8";
       record(platform, media ? "hls-media" : "hls-master", output !== body, summary, output !== body ? "rewritten" : "unchanged");

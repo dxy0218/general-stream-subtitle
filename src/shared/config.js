@@ -1,4 +1,4 @@
-GSS.VERSION = "0.6.10";
+GSS.VERSION = "0.6.11";
 GSS.SETTINGS_KEY = "GSS_SETTINGS_V4";
 GSS.PROVIDER_SECRETS_KEY = "GSS_PROVIDER_SECRETS_V1";
 GSS.ADMIN_TOKEN_KEY = "GSS_ADMIN_TOKEN_V1";
@@ -23,6 +23,7 @@ GSS.DEFAULTS = {
   platforms: "all",
   discoveryMode: "full",
   safePlayback: false,
+  maxReplaceSource: false,
   presetMode: false,
   hyMt2Preset: false,
   platformDiscovery: false,
@@ -74,7 +75,7 @@ GSS.allowedSettings = {
   providerModel: "string", providerRegion: "string", providerProject: "string", providerLocation: "string",
   providerPrompt: "string", source: "string", sourcePriority: "string", target: "string", trackName: "string",
   injectTranslated: "boolean", translatedTrackName: "string", bilingualOrder: "string", platforms: "string", discoveryMode: "string",
-  safePlayback: "boolean", presetMode: "boolean", hyMt2Preset: "boolean", platformDiscovery: "boolean", discoveryHlsOnly: "boolean",
+  safePlayback: "boolean", maxReplaceSource: "boolean", presetMode: "boolean", hyMt2Preset: "boolean", platformDiscovery: "boolean", discoveryHlsOnly: "boolean",
   platformMax: "boolean", platformPluto: "boolean", platformPrime: "boolean", platformHulu: "boolean", platformYoutube: "boolean",
   formats: "string", genericMode: "boolean", customDomains: "string", youtubeStrategy: "string",
   youtubeUseAsr: "boolean", youtubeLive: "boolean", youtubePreferManual: "boolean", logEnabled: "boolean", debug: "boolean", cacheEnabled: "boolean",
@@ -183,6 +184,9 @@ GSS.getConfig = function getConfig() {
     config.logEnabled = args.logEnabled !== false;
     config.debug = !!args.debug;
     config.safePlayback = true;
+    // Max/tvOS removes synthetic subtitle renditions after selection. Keep the
+    // trusted source rendition and route its URI through bilingual translation.
+    config.maxReplaceSource = args.maxReplaceSource !== false;
     config.presetMode = true;
     config.hyMt2Preset = useHyMt2;
   }

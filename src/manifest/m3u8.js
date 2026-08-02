@@ -137,15 +137,37 @@ GSS.M3U8 = (function createM3U8Tools() {
     return serialize(tag, attributes);
   }
 
+  function virtualizeSourceTrack(candidate, requestUrl, config, platform) {
+    var tag = candidate.line.slice(0, candidate.line.indexOf(":"));
+    var attributes = parseAttributes(candidate.line);
+    var originalUri = get(attributes, "URI");
+    if (!originalUri) return null;
+    // Preserve every identity and selection attribute exactly as Max supplied
+    // it. Only the media URI changes, so the app continues to trust this as its
+    // original en-US CC rendition while the Gateway returns bilingual VTT.
+    set(attributes, "URI", GSS.Url.virtual(config.virtualOrigin, "/playlist", {
+      origin: GSS.Url.resolve(requestUrl, originalUri),
+      mode: "bilingual",
+      source: GSS.Language.googleSource(candidate.language, config.source),
+      target: config.target,
+      platform: platform ? platform.id : "unknown",
+      strategy: "replace-source",
+      version: GSS.VERSION
+    }), true);
+    return serialize(tag, attributes);
+  }
+
   function inspectTrackTypes(lines) {
-    var summary = { subtitles: 0, closedCaptions: 0, subtitleUris: 0, renditions: [] };
+    var summary = { subtitles: 0, closedCaptions: 0, subtitleUris: 0, virtualSubtitleUris: 0, renditions: [] };
     lines.forEach(function (line) {
       if (line.indexOf("#EXT-X-MEDIA:") !== 0) return;
       var attributes = parseAttributes(line);
       var type = String(get(attributes, "TYPE") || "").toUpperCase();
       if (type === "SUBTITLES") {
         summary.subtitles += 1;
-        if (get(attributes, "URI")) summary.subtitleUris += 1;
+        var uri = String(get(attributes, "URI") || "");
+        if (uri) summary.subtitleUris += 1;
+        if (/(?:gss\.local|example\.com)\/playlist/.test(uri)) summary.virtualSubtitleUris += 1;
         if (summary.renditions.length < 8) summary.renditions.push({
           group: String(get(attributes, "GROUP-ID") || ""),
           name: String(get(attributes, "NAME") || ""),
@@ -155,7 +177,8 @@ GSS.M3U8 = (function createM3U8Tools() {
           forced: String(get(attributes, "FORCED") || ""),
           stableId: get(attributes, "STABLE-RENDITION-ID") ? "present" : "absent",
           assocLanguage: String(get(attributes, "ASSOC-LANGUAGE") || ""),
-          characteristics: String(get(attributes, "CHARACTERISTICS") || "")
+          characteristics: String(get(attributes, "CHARACTERISTICS") || ""),
+          virtual: /(?:gss\.local|example\.com)\/playlist/.test(uri)
         });
       }
       if (type === "CLOSED-CAPTIONS") summary.closedCaptions += 1;
@@ -198,9 +221,16 @@ GSS.M3U8 = (function createM3U8Tools() {
     }
 
     var output = [], injected = 0;
+    var replaceSource = !!(config.maxReplaceSource && platform && platform.id === "max");
     lines.forEach(function (line, index) {
+      if (index !== selected.index) { output.push(line); return; }
+      if (replaceSource) {
+        var replacement = virtualizeSourceTrack(selected, requestUrl, config, platform);
+        output.push(replacement || line);
+        if (replacement) injected += 1;
+        return;
+      }
       output.push(line);
-      if (index !== selected.index) return;
       var bilingual = duplicateTrack(selected, requestUrl, "bilingual", config, platform);
       if (bilingual) { output.push(bilingual); injected += 1; }
       if (config.injectTranslated) {
@@ -214,7 +244,8 @@ GSS.M3U8 = (function createM3U8Tools() {
       trackName: config.trackName,
       selectedName: selected.name,
       selectedLanguage: selected.language || "auto",
-      configuredSource: config.source
+      configuredSource: config.source,
+      strategy: replaceSource ? "replace-source" : "duplicate"
     });
     return injected ? output.join("\n") : body;
   }

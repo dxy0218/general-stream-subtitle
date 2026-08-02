@@ -4,7 +4,7 @@
 
 项目通过 HTTPS MITM 读取播放器清单、播放器响应或文本字幕，在原有字幕菜单中加入一个可见的 **`Translate-zh`** 轨道。只有当用户选择该轨道后，模块才获取原字幕、调用翻译 Provider，并返回双语或纯翻译字幕。
 
-> 当前版本：**v0.6.10**
+> 当前版本：**v0.6.11**
 > 支持系统：iOS、iPadOS、macOS、tvOS（具体能力取决于代理客户端与流媒体 App）  
 > 开源协议：MIT
 
@@ -281,7 +281,7 @@ Shadowrocket 的 v0.6.0 安全预设属于例外：模块编辑页中的平台�
 
 Shadowrocket 和 Surge 可以直接编辑常用模块参数。Loon 建议通过 `gss.local` 管理页面配置。
 
-Shadowrocket 原生编辑器不会把字符串候选值渲染成下拉菜单，因此模块只暴露布尔开关。默认预设为：自动识别源语言、翻译为简体中文、`Translate-zh`、`google-free`、HLS 播放保护。打开 `HY_MT2` 后改用保存在本地管理页中的私有 OpenAI-compatible Endpoint 和 API Key；未配置或请求失败时自动回退到 `google-free`。
+Shadowrocket 原生编辑器不会把字符串候选值渲染成下拉菜单，因此模块只暴露布尔开关。默认预设为：自动识别源语言、翻译为简体中文、`Translate-zh`、`google-free`、HLS 播放保护。Max 是例外：tvOS 会移除运行时新增的第二条 rendition，因此 Shadowrocket 保留原始 `en-US CC` 轨并就地返回双语字幕；在菜单中选择 `en-US CC` 即可。打开 `HY_MT2` 后改用保存在本地管理页中的私有 OpenAI-compatible Endpoint 和 API Key；未配置或请求失败时自动回退到 `google-free`。
 
 | 模块参数 | 默认值 | 说明 |
 |---|---|---|
@@ -435,6 +435,12 @@ cdn.example.net
 ```
 
 ## 版本更新记录
+
+### v0.6.11 — Max 原轨就地双语翻译
+
+- Shadowrocket 的 Max 适配不再新增会被 tvOS 移除的第二条字幕轨。
+- 完整保留 Max 原始 `en-US CC` 的名称、语言、分组及无障碍属性，只将其 URI 指向双语翻译。
+- 在 Max 字幕菜单中选择原有 `en-US CC` 即可启用中英双语；不会再出现单独的 `Translate-zh` 选项。
 
 ### v0.6.10 — Shadowrocket 脚本缓存刷新
 

@@ -118,7 +118,11 @@ test("Shadowrocket preset overrides stale settings and injects all five requeste
       $persistentStore: persistent,
       $done(p) { result = p; }
     });
-    assert.match(result.body, /NAME="Translate-zh"/);
+    if (platform === "max") {
+      assert.doesNotMatch(result.body, /NAME="Translate-zh"/);
+      assert.equal((result.body.match(/TYPE=SUBTITLES/g) || []).length, 1);
+      assert.match(decodeURIComponent(result.body), /strategy=replace-source/);
+    } else assert.match(result.body, /NAME="Translate-zh"/);
     assert.match(decodeURIComponent(result.body), new RegExp(`platform=${platform}`));
   }
 });
@@ -149,6 +153,7 @@ test("Shadowrocket Hy-MT2 preset keeps the private endpoint and normal fallback 
   assert.equal(config.batchItems, 12);
   assert.equal(config.batchChars, 1600);
   assert.equal(config.hyMt2Preset, true);
+  assert.equal(config.maxReplaceSource, true);
 });
 
 test("safe playback preset bypasses non-HLS responses and a disabled Discovery adapter", () => {

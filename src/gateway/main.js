@@ -82,7 +82,7 @@
   }
 
   function forwardedOrigin(origin, query) {
-    var reserved = { origin:1, mode:1, source:1, target:1, platform:1, live:1, full:1, version:1, tlang:1 };
+    var reserved = { origin:1, mode:1, source:1, target:1, platform:1, strategy:1, live:1, full:1, version:1, tlang:1 };
     var extra = {};
     Object.keys(query || {}).forEach(function (key) { if (!reserved[key]) extra[key] = query[key]; });
     return GSS.Url.appendParams(origin, extra);

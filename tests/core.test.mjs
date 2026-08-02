@@ -120,6 +120,29 @@ test("removes source-only association metadata from a translated Max rendition",
   assert.equal(details.renditions[1].autoselect,"NO");
 });
 
+test("replaces the trusted Max source URI without changing its rendition identity", () => {
+  const { GSS } = load(core);
+  const body = [
+    "#EXTM3U",
+    '#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="vtt",NAME="en-US CC",LANGUAGE="en-US",DEFAULT=NO,AUTOSELECT=YES,CHARACTERISTICS="public.accessibility.transcribes-spoken-dialog",URI="captions/en.m3u8"',
+    '#EXT-X-STREAM-INF:BANDWIDTH=1000000,SUBTITLES="vtt"',
+    "video/main.m3u8"
+  ].join("\n");
+  const config = { ...GSS.DEFAULTS, maxReplaceSource:true };
+  const output = GSS.M3U8.injectTracks(body,"https://gcp.prd.media.h264.io/title/hls.m3u8",config,{info(){}},{id:"max"});
+  assert.equal((output.match(/TYPE=SUBTITLES/g)||[]).length,1);
+  assert.match(output,/NAME="en-US CC"/);
+  assert.match(output,/LANGUAGE="en-US"/);
+  assert.match(output,/AUTOSELECT=YES/);
+  assert.match(output,/CHARACTERISTICS="public\.accessibility\.transcribes-spoken-dialog"/);
+  assert.doesNotMatch(output,/Translate-zh/);
+  assert.match(decodeURIComponent(output),/strategy=replace-source/);
+  const details = GSS.M3U8.inspectTrackTypes(output.split("\n"));
+  assert.equal(details.subtitles,1);
+  assert.equal(details.virtualSubtitleUris,1);
+  assert.equal(details.renditions[0].virtual,true);
+});
+
 test("optionally injects a pure translated track", () => {
   const { GSS } = load(core);
   const body = fs.readFileSync(path.join(root,"tests/fixtures/master.m3u8"),"utf8");

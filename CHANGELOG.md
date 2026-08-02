@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.6.11
+
+- Use source-rendition replacement for Max in the Shadowrocket safety preset because Max/tvOS removes synthetic second subtitle renditions after selection.
+- Preserve the complete trusted Max subtitle identity while routing only its URI through bilingual translation.
+- Report replacement strategy and virtual subtitle URI counts in sanitized manifest diagnostics.
+
 ## 0.6.10
 
 - Add the package version to every generated remote runtime URL so proxy clients cannot mix cached manifest, Gateway and YouTube bundles from different releases.
