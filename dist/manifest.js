@@ -1,4 +1,4 @@
-// General Stream Subtitle 0.6.6 - manifest
+// General Stream Subtitle 0.6.7 - manifest
 // MIT License - generated file; edit src/ instead.
 (function () {
 "use strict";
@@ -247,7 +247,7 @@ GSS.Language = (function createLanguageTools() {
   };
 })();
 
-GSS.VERSION = "0.6.6";
+GSS.VERSION = "0.6.7";
 GSS.SETTINGS_KEY = "GSS_SETTINGS_V4";
 GSS.PROVIDER_SECRETS_KEY = "GSS_PROVIDER_SECRETS_V1";
 GSS.ADMIN_TOKEN_KEY = "GSS_ADMIN_TOKEN_V1";
@@ -1440,18 +1440,34 @@ GSS.M3U8 = (function createM3U8Tools() {
   function decorateSubtitlePlaylist(body, originUrl, mode, source, target, config, logger, platform) {
     if (!body || body.indexOf("#EXTM3U") < 0) return body;
     var changed = 0;
+    var maxByteRangeVtt = platform === "max"
+      && /#EXT-X-BYTERANGE:/i.test(body)
+      && /\.vtt(?:[?#]|["']|$)/i.test(body);
     var output = body.replace(/\r\n/g, "\n").split("\n").map(function (line) {
       var trimmed = line.trim();
+      // Max commonly exposes each WebVTT object as an 8-byte EXT-X-MAP
+      // ("WEBVTT\nX") followed by a byte range beginning at byte 8. A virtual
+      // translated response has a different length, so retaining those byte
+      // ranges makes AVPlayer truncate the rewritten VTT and remove the
+      // selected subtitle rendition. Each numbered .vtt object is already a
+      // complete standalone WebVTT file; request it whole through the gateway.
+      if (maxByteRangeVtt && (/^#EXT-X-BYTERANGE:/i.test(trimmed)
+        || /^#EXT-X-MAP:.*\bURI=["'][^"']*\.vtt(?:[?#][^"']*)?["']/i.test(trimmed))) {
+        changed += 1;
+        return "";
+      }
       if (!trimmed || trimmed[0] === "#") return line;
       changed += 1;
-      return GSS.Url.virtual(config.virtualOrigin, "/subtitle", {
+      var virtualParams = {
         origin: GSS.Url.resolve(originUrl, trimmed),
         mode: mode,
         source: source,
         target: target,
         platform: platform || "unknown",
         version: GSS.VERSION
-      });
+      };
+      if (maxByteRangeVtt) virtualParams.full = "1";
+      return GSS.Url.virtual(config.virtualOrigin, "/subtitle", virtualParams);
     });
     logger.info("subtitle playlist virtualized", { segments: changed, mode: mode, platform: platform || "unknown" });
     return changed ? output.join("\n") : body;

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.6.7
+
+- Convert Max byte-range WebVTT playlists into standalone virtual subtitle segments before translation.
+- Remove stale `EXT-X-MAP`/`EXT-X-BYTERANGE` directives that truncate translated output and make tvOS remove the selected subtitle rendition.
+- Ignore inherited player `Range` and `If-Range` headers when the Gateway fetches those standalone Max WebVTT objects.
+
 ## 0.6.5
 
 - Detect subtitle payloads that cannot fit the 512-token self-hosted Hy-MT2 profile and fail over before sending an oversized request.

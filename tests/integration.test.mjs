@@ -53,6 +53,28 @@ test("gateway translates WebVTT through Google free provider", () => {
   assert.match(result.response.body,/你好吗？\n<v Speaker>How are you\?<\/v>/);
 });
 
+test("Max standalone VTT gateway ignores the stale playlist byte range", () => {
+  const vtt=fs.readFileSync(path.join(root,"tests/fixtures/sample.vtt"),"utf8");
+  const store=new Map(); let result; let originHeaders;
+  const origin="https://cdn.max.com/sub/1.vtt";
+  run("dist/gateway.js",{
+    $request:{
+      url:"https://example.com/subtitle?origin="+encodeURIComponent(origin)+"&mode=bilingual&source=en&target=zh-CN&platform=max&full=1",
+      headers:{Range:"bytes=8-503","If-Range":"stale-etag","User-Agent":"Max"}
+    },
+    $httpClient:{get(options,cb){
+      if(options.url===origin){originHeaders=options.headers;cb(null,{status:200,headers:{"Content-Type":"text/plain"}},vtt);return;}
+      cb(null,{status:200},JSON.stringify([[['[[GSS_0000]]\n你好。\n[[GSS_0001]]\n你好吗？','',null,null]]]));
+    }},
+    $persistentStore:{read(k){return store.get(k)||null;},write(v,k){store.set(k,v);return true;}},
+    $done(p){result=p;}
+  });
+  assert.equal(originHeaders.Range,undefined);
+  assert.equal(originHeaders["If-Range"],undefined);
+  assert.match(result.response.body,/^WEBVTT/);
+  assert.match(result.response.body,/你好。/);
+});
+
 test("admin POST saves provider, formats, platforms, and API key without exposing it", () => {
   const store=new Map([["GSS_ADMIN_TOKEN_V1","abc"]]); let result;
   const body = [

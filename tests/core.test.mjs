@@ -116,3 +116,22 @@ test("virtualizes every subtitle segment without touching signed origin URLs", (
   assert.match(decodeURIComponent(output),/\/subs\/segments\/segment-002\.vtt\?token=def/);
   assert.match(decodeURIComponent(output),/platform=max/);
 });
+
+test("turns Max byte-range WebVTT objects into standalone virtual segments", () => {
+  const { GSS } = load(core);
+  const body = [
+    "#EXTM3U",
+    "#EXT-X-VERSION:7",
+    '#EXT-X-MAP:URI="1.vtt",BYTERANGE="8@0"',
+    "#EXTINF:13.0,",
+    "#EXT-X-BYTERANGE:496@8",
+    "1.vtt",
+    "#EXT-X-ENDLIST"
+  ].join("\n");
+  const output = GSS.M3U8.decorateSubtitlePlaylist(body,"https://cdn.max.com/subs/hlsMedia.m3u8","bilingual","en","zh-CN",GSS.DEFAULTS,{info(){}},"max");
+  assert.doesNotMatch(output,/#EXT-X-MAP/);
+  assert.doesNotMatch(output,/#EXT-X-BYTERANGE/);
+  assert.match(output,/https:\/\/example\.com\/subtitle\?/);
+  assert.match(decodeURIComponent(output),/origin=https:\/\/cdn\.max\.com\/subs\/1\.vtt/);
+  assert.match(decodeURIComponent(output),/full=1/);
+});

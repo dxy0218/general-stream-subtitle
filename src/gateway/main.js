@@ -45,12 +45,18 @@
   function deleteHeader(headers, name) {
     Object.keys(headers || {}).forEach(function (key) { if (key.toLowerCase() === name.toLowerCase()) delete headers[key]; });
   }
-  function upstreamRequestHeaders(platform) {
+  function upstreamRequestHeaders(platform, forceFullBody) {
     var headers = {};
     Object.keys(GSS.Runtime.request.headers || {}).forEach(function (key) { headers[key] = GSS.Runtime.request.headers[key]; });
     deleteHeader(headers, "Host");
     deleteHeader(headers, "Content-Length");
     deleteHeader(headers, "Content-Encoding");
+    // The virtualized Max playlist removes EXT-X-BYTERANGE and expects a
+    // standalone translated WebVTT object, not the player's old media range.
+    if (forceFullBody) {
+      deleteHeader(headers, "Range");
+      deleteHeader(headers, "If-Range");
+    }
     var originHeader = headerValue(headers, "origin");
     var refererHeader = headerValue(headers, "referer");
     if (/gss\.local|127\.0\.0\.1|localhost/i.test(originHeader)) deleteHeader(headers, "origin");
@@ -70,7 +76,7 @@
   }
 
   function forwardedOrigin(origin, query) {
-    var reserved = { origin:1, mode:1, source:1, target:1, platform:1, live:1, version:1, tlang:1 };
+    var reserved = { origin:1, mode:1, source:1, target:1, platform:1, live:1, full:1, version:1, tlang:1 };
     var extra = {};
     Object.keys(query || {}).forEach(function (key) { if (!reserved[key]) extra[key] = query[key]; });
     return GSS.Url.appendParams(origin, extra);
@@ -94,7 +100,7 @@
 
     trace("subtitle-request", "started", { route: path, mode: mode, source: source, target: target }, "info", origin);
 
-    GSS.Runtime.httpGet({ url: origin, headers: upstreamRequestHeaders(platform) }, function (error, body, response) {
+    GSS.Runtime.httpGet({ url: origin, headers: upstreamRequestHeaders(platform, query.full === "1") }, function (error, body, response) {
       if (error) { emptyResponse("upstream fetch failed: " + String(error), null, origin); return; }
       try {
         var upstreamType = headerValue(upstreamHeaders(response), "content-type");
