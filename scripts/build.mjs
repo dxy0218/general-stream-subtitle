@@ -67,7 +67,10 @@ const shadowMitmHosts = [
   "*.hls.pv-cdn.net", "*.hls.row.aiv-cdn.net", "*avodhlss3ww-a.akamaihd.net",
   "d1v5ir2lpwr8os.cloudfront.net", "d22qjgkvxw22r6.cloudfront.net", "d25xi40x97liuc.cloudfront.net", "d27xxe7juh1us6.cloudfront.net", "dmqdd6hw24ucf.cloudfront.net",
   "vodmanifest.hulustream.com", "manifest-dp.hulustream.com", "livemanifest-f.hulustream.com", "live-sc.hulustream.com",
-  "*.youtube.com", "youtubei.googleapis.com", "example.com", "gss.local"
+  // YouTube's tvOS clients reject Shadowrocket's MITM certificate and report
+  // an offline state. Keep YouTube interception in the Surge/Loon modules, but
+  // never append those hosts from the Apple TV-safe Shadowrocket preset.
+  "example.com", "gss.local"
 ].join(", ");
 const forceHttpHosts = [
   "*.hls.pv-cdn.net", "*.hls.row.aiv-cdn.net", "*avodhlss3ww-a.akamaihd.net", "cf-timedtext.aux.pv-cdn.net",
@@ -82,7 +85,7 @@ const youtubeUrl = `${rawBase}/dist/youtube.js?v=${runtimeVersion}`;
 const youtubeCaptionUrl = `${rawBase}/dist/youtube-caption.js?v=${runtimeVersion}`;
 const defaultArgs = "source=auto&target=zh-CN&trackName=Translate-zh&provider=google-free&platforms=all&discoveryMode=full&safePlayback=false&formats=all&genericMode=false&youtubeStrategy=direct&youtubeUseAsr=true&youtubeLive=true&youtubePreferManual=true&injectTranslated=false&bilingualOrder=translation-first&cacheEnabled=true&logEnabled=true&debug=false";
 const surgeArgs = "source=%SOURCE%&target=%TARGET%&trackName=%TRACK_NAME%&provider=%PROVIDER%&platforms=%PLATFORMS%&discoveryMode=%DISCOVERY_MODE%&formats=%FORMATS%&genericMode=%GENERIC%&youtubeStrategy=%YT_STRATEGY%&youtubeUseAsr=%YT_ASR%&youtubeLive=%YT_LIVE%&youtubePreferManual=%YT_MANUAL%&injectTranslated=%PURE_TRACK%&bilingualOrder=%ORDER%&cacheEnabled=%CACHE%&logEnabled=%LOGS%&debug=%DEBUG%";
-const shadowArgs = "presetMode=true&safePlayback=true&maxReplaceSource=true&hyMt2Preset={{{HY_MT2}}}&platformDiscovery={{{DISCOVERY}}}&discoveryHlsOnly={{{DISCOVERY_HLS_ONLY}}}&platformMax={{{MAX}}}&platformPluto={{{PLUTO}}}&platformPrime={{{PRIME}}}&platformHulu={{{HULU}}}&platformYoutube={{{YOUTUBE}}}&youtubeUseAsr={{{YT_ASR}}}&youtubeLive={{{YT_LIVE}}}&injectTranslated={{{PURE_TRACK}}}&cacheEnabled={{{CACHE}}}&logEnabled={{{LOGS}}}&debug={{{DEBUG}}}";
+const shadowArgs = "presetMode=true&safePlayback=true&maxReplaceSource=true&hyMt2Preset={{{HY_MT2}}}&platformDiscovery={{{DISCOVERY}}}&discoveryHlsOnly={{{DISCOVERY_HLS_ONLY}}}&platformMax={{{MAX}}}&platformPluto={{{PLUTO}}}&platformPrime={{{PRIME}}}&platformHulu={{{HULU}}}&injectTranslated={{{PURE_TRACK}}}&cacheEnabled={{{CACHE}}}&logEnabled={{{LOGS}}}&debug={{{DEBUG}}}";
 const shadowSwitches = [
   { key: "DISCOVERY", value: false, description: "Discovery+ 实验适配；默认关闭，打开后仅处理 HLS 主清单" },
   { key: "DISCOVERY_HLS_ONLY", value: true, description: "Discovery+ 播放保护；保持开启以跳过 DASH 和播放 JSON" },
@@ -90,9 +93,6 @@ const shadowSwitches = [
   { key: "PLUTO", value: true, description: "Pluto TV HLS 中文字幕" },
   { key: "PRIME", value: true, description: "Amazon Prime Video HLS 中文字幕" },
   { key: "HULU", value: true, description: "Hulu HLS 中文字幕" },
-  { key: "YOUTUBE", value: true, description: "YouTube / YouTube TV 中文字幕" },
-  { key: "YT_ASR", value: true, description: "允许 YouTube 自动生成字幕" },
-  { key: "YT_LIVE", value: true, description: "处理 YouTube 直播文本字幕" },
   { key: "HY_MT2", value: false, description: "使用私有 Hy-MT2 翻译服务；先在管理页保存 Endpoint 和 API Key" },
   { key: "PURE_TRACK", value: false, description: "额外显示纯翻译字幕轨" },
   { key: "CACHE", value: true, description: "启用翻译缓存" },
@@ -162,9 +162,6 @@ GSS Prime Video HLS = type=http-response, pattern=${primeHlsPattern}, requires-b
 GSS Hulu HLS = type=http-response, pattern=${huluHlsPattern}, requires-body=1, max-size=4194304, timeout=20, script-path=${manifestUrl}, argument=${shadowArgs}
 GSS Gateway = type=http-request, pattern=${gatewayGetPattern}, requires-body=0, timeout=90, script-path=${gatewayUrl}, argument=${shadowArgs}
 GSS Gateway Save = type=http-request, pattern=${gatewaySavePattern}, requires-body=1, timeout=90, script-path=${gatewayUrl}, argument=${shadowArgs}
-GSS YouTube Player = type=http-response, pattern=${youtubePlayerPattern}, requires-body=1, max-size=4194304, timeout=30, script-path=${youtubeUrl}, argument=${shadowArgs}
-GSS YouTube Caption = type=http-response, pattern=${youtubeCaptionPattern}, requires-body=1, max-size=4194304, timeout=90, script-path=${youtubeCaptionUrl}, argument=${shadowArgs}
-
 [MITM]
 hostname = %APPEND% ${shadowMitmHosts}
 `;

@@ -4,7 +4,7 @@
 
 项目通过 HTTPS MITM 读取播放器清单、播放器响应或文本字幕，在原有字幕菜单中加入一个可见的 **`Translate-zh`** 轨道。只有当用户选择该轨道后，模块才获取原字幕、调用翻译 Provider，并返回双语或纯翻译字幕。
 
-> 当前版本：**v0.6.11**
+> 当前版本：**v0.6.12**
 > 支持系统：iOS、iPadOS、macOS、tvOS（具体能力取决于代理客户端与流媒体 App）  
 > 开源协议：MIT
 
@@ -33,7 +33,7 @@
 - 支持自动选择源字幕，也可以指定 `en`、`ja`、`ko`、`fr` 等语言代码。
 - 默认优先人工字幕，再考虑 SDH、CC 和自动生成字幕。
 - 支持 HLS、部分 DASH，以及多种文本字幕格式。
-- 支持 YouTube 普通视频、Shorts、YouTube Live 和 YouTube TV 的文本字幕轨。
+- Surge/Loon 支持 YouTube 普通视频、Shorts、YouTube Live 和 YouTube TV 的文本字幕轨；Shadowrocket 为避免 tvOS 断网不拦截 YouTube。
 - 支持多种翻译 Provider、备用 Provider 链和自定义 API。
 - 提供由脚本合成的本地管理页面，设置会保存在代理软件的持久化存储中。
 - 提供可复制、可清空的脱敏运行日志，覆盖清单、字幕网关、翻译和安全放行阶段。
@@ -70,7 +70,7 @@ youtubei/v1/player
 
 | 客户端 | 模块文件 | 主要设置方式 |
 |---|---|---|
-| Shadowrocket | `GeneralStreamSubtitle.module` | 模块参数 + `gss.local` |
+| Shadowrocket | `GeneralStreamSubtitle.module` | Apple TV 安全预设；不拦截 YouTube / YouTube TV |
 | Loon | `GeneralStreamSubtitle.plugin` | `gss.local` 为主 |
 | Surge | `GeneralStreamSubtitle.sgmodule` | 模块参数 + `gss.local` |
 
@@ -120,7 +120,7 @@ https://raw.githubusercontent.com/dxy0218/general-stream-subtitle/main/modules/G
 
 正常通过模块安装时，所需域名已经使用 `%APPEND%` 自动加入 MITM 列表，一般不需要手动填写。
 
-YouTube 相关的关键域名包括：
+Surge/Loon 的 YouTube 相关关键域名包括：
 
 ```text
 *.youtube.com
@@ -129,6 +129,8 @@ gss.local
 ```
 
 当前模块不需要对 `*.googlevideo.com` 做 MITM，因为它不修改 YouTube 视频或音频流。给视频 CDN 强制解密可能增加性能消耗或导致播放异常。
+
+Shadowrocket 模块不会加入 `*.youtube.com` 或 `youtubei.googleapis.com`，也不会生成 YouTube 脚本规则。YouTube TV 的 tvOS 原生客户端会拒绝 Shadowrocket 的 MITM 连接并显示“没有网络”，因此该平台必须使用 App 自带字幕。不要在 Apple TV 上手动把这些域名加回 MITM。
 
 在 Apple TV + Shadowrocket 上使用 Discovery+ 时，默认开关为关闭。即使打开，也只检查可识别媒体 CDN 上的 HLS 主清单；`*.discoveryplus.com`、`*.disco-api.com`、Max/Discovery 的账户、设备、GraphQL、播放会话和 DRM 接口都会绕过脚本规则。不要为了扩大匹配范围而手动把这些整站域名加入 MITM。
 
@@ -159,8 +161,8 @@ gss.local
 
 | 平台 | 平台 ID | 当前处理范围 |
 |---|---|---|
-| YouTube / Shorts / Live | `youtube` | `youtubei/v1/player`、captionTracks、timedtext、JSON3、srv3 |
-| YouTube TV | `youtube-tv` | TVHTML5 播放器暴露的文本 CC；不解码视频流内嵌 CEA-608/708 |
+| YouTube / Shorts / Live | `youtube` | Surge/Loon：`youtubei/v1/player`、captionTracks、timedtext、JSON3、srv3；Shadowrocket 不启用 |
+| YouTube TV | `youtube-tv` | Surge/Loon 实验适配；Shadowrocket/tvOS 因证书校验不启用 |
 | BBC iPlayer | `bbc` | 通用 HLS / 文本字幕适配 |
 | Rakuten Viki | `viki` | 通用 HLS / 文本字幕适配 |
 | Tubi | `tubi` | 通用 HLS / 文本字幕适配 |
@@ -291,9 +293,6 @@ Shadowrocket 原生编辑器不会把字符串候选值渲染成下拉菜单，�
 | `PLUTO` | `true` | Pluto TV HLS 中文字幕 |
 | `PRIME` | `true` | Amazon Prime Video HLS 中文字幕 |
 | `HULU` | `true` | Hulu 点播/直播 HLS 中文字幕 |
-| `YOUTUBE` | `true` | YouTube / YouTube TV 中文字幕 |
-| `YT_ASR` | `true` | 是否允许使用 YouTube 自动生成字幕 |
-| `YT_LIVE` | `true` | 是否处理 YouTube 直播文本字幕 |
 | `HY_MT2` | `false` | 使用私有 Hy-MT2 服务；需先在管理页保存 Endpoint 和 API Key |
 | `PURE_TRACK` | `false` | 是否额外显示纯翻译字幕轨 |
 | `CACHE` | `true` | 是否启用翻译缓存 |
@@ -397,6 +396,8 @@ PLATFORMS=max|apple-tv-plus|apple-fitness
 
 ### YouTube 推荐设置
 
+以下设置仅适用于 Surge/Loon。Shadowrocket 安全模块不会拦截 YouTube 或 YouTube TV。
+
 ```text
 PLATFORMS=youtube|youtube-tv
 YT_STRATEGY=direct
@@ -435,6 +436,12 @@ cdn.example.net
 ```
 
 ## 版本更新记录
+
+### v0.6.12 — Shadowrocket Apple TV 安全兼容
+
+- Shadowrocket 模块不再解密或改写 YouTube / YouTube TV 流量，避免 tvOS 客户端因证书校验而显示“没有网络”。
+- Max、Disney+、Hulu 等其余平台的字幕规则保持不变，Any Where To Go 等独立定位模块也不受影响。
+- Surge 与 Loon 版本继续保留原有 YouTube 字幕功能。
 
 ### v0.6.11 — Max 原轨就地双语翻译
 
@@ -618,6 +625,7 @@ https://example.com/
 - Shadowrocket 先关闭出现异常的平台开关，完全退出对应 App 后重新打开。
 - Discovery+ 默认保持 `DISCOVERY=false`；需要测试中文字幕时再打开，并保持 `DISCOVERY_HLS_ONLY=true`。
 - 不要给视频 CDN（如 `*.googlevideo.com`）额外开启 MITM。
+- Apple TV 的 YouTube TV 显示“没有网络”时，更新 Shadowrocket 模块并确认 MITM 列表中没有 `*.youtube.com` 与 `youtubei.googleapis.com`；不要手动加回。
 - 关闭纯翻译轨，减少字幕菜单和请求数量。
 - Apple TV / Fitness+ 出现异常时，先更新模块并完全退出 App；新版本会为注入轨生成独立 `STABLE-RENDITION-ID`，并移除改写后失效的 ETag/Digest。
 - Surge/Loon 用户可将 `genericMode=false`，并把 `platforms` 限制为实际需要的平台。

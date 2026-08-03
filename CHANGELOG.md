@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.6.12
+
+- Make the Shadowrocket module safe for Apple TV by removing YouTube and YouTube TV response scripts and MITM hostnames.
+- Keep YouTube subtitle support available in the Surge and Loon modules, where it remains explicitly opt-in through their normal configuration.
+- Prevent YouTube TV on tvOS from reporting an offline state after the Shadowrocket CA is trusted.
+
 ## 0.6.11
 
 - Use source-rendition replacement for Max in the Shadowrocket safety preset because Max/tvOS removes synthetic second subtitle renditions after selection.

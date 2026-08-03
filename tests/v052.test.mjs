@@ -276,7 +276,7 @@ test("Shadowrocket exposes only native boolean switches", () => {
   const descriptionLine = content.split("\n").find((line) => line.startsWith("#!arguments-desc="));
   const entries = argumentLine.slice("#!arguments=".length).split(",").map((entry) => entry.trim().split(":"));
   const names = entries.map(([name]) => name);
-  assert.deepEqual(names, ["DISCOVERY", "DISCOVERY_HLS_ONLY", "MAX", "PLUTO", "PRIME", "HULU", "YOUTUBE", "YT_ASR", "YT_LIVE", "HY_MT2", "PURE_TRACK", "CACHE", "LOGS", "DEBUG"]);
+  assert.deepEqual(names, ["DISCOVERY", "DISCOVERY_HLS_ONLY", "MAX", "PLUTO", "PRIME", "HULU", "HY_MT2", "PURE_TRACK", "CACHE", "LOGS", "DEBUG"]);
   for (const [name, value] of entries) {
     assert.match(value, /^(?:true|false)$/);
     assert.match(descriptionLine, new RegExp(`${name}: `));
@@ -285,6 +285,15 @@ test("Shadowrocket exposes only native boolean switches", () => {
   assert.match(content, /hyMt2Preset=\{\{\{HY_MT2\}\}\}/);
   assert.match(content, /safePlayback/);
   assert.doesNotMatch(argumentLine, /SOURCE|TARGET|PROVIDER|PLATFORMS|FORMATS|ORDER/);
+});
+
+test("Shadowrocket safety module never intercepts YouTube TV", () => {
+  const content = fs.readFileSync(path.join(root, "modules", "GeneralStreamSubtitle.module"), "utf8");
+  const hostnameLine = content.split("\n").find((line) => line.startsWith("hostname = "));
+  assert.doesNotMatch(content, /GSS YouTube Player/);
+  assert.doesNotMatch(content, /GSS YouTube Caption/);
+  assert.doesNotMatch(hostnameLine, /youtube/i);
+  assert.doesNotMatch(content, /platformYoutube|youtubeUseAsr|youtubeLive/);
 });
 
 test("Shadowrocket Gateway GET routes do not require a request body", () => {

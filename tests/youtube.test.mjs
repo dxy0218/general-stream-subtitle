@@ -135,8 +135,8 @@ test("virtual YouTube gateway forwards live sequence parameters",()=>{
   assert.match(result.response.body,/正在直播/);
 });
 
-test("generated modules include YouTube player and timedtext scripts",()=>{
-  for(const file of ["GeneralStreamSubtitle.module","GeneralStreamSubtitle.plugin","GeneralStreamSubtitle.sgmodule"]){
+test("Surge and Loon modules include YouTube player and timedtext scripts",()=>{
+  for(const file of ["GeneralStreamSubtitle.plugin","GeneralStreamSubtitle.sgmodule"]){
     const text=fs.readFileSync(path.join(root,"modules",file),"utf8");
     assert.match(text,/GSS YouTube Player/);
     assert.match(text,/GSS YouTube Caption/);
