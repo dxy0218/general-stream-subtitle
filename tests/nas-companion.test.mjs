@@ -1,0 +1,40 @@
+import assert from "node:assert/strict";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import test from "node:test";
+import { outputPathFor, parseSrt, processSrt, renderSrt, scanOnce } from "../nas-companion/index.mjs";
+
+const SAMPLE = "1\n00:00:01,000 --> 00:00:02,000\nNAS upload smoke OK\n";
+
+test("parses and renders bilingual SRT without changing timing", () => {
+  const cues = parseSrt(SAMPLE);
+  assert.equal(cues[0].text, "NAS upload smoke OK");
+  assert.equal(renderSrt(cues, ["NAS 上传验证通过"]), "1\n00:00:01,000 --> 00:00:02,000\nNAS upload smoke OK\nNAS 上传验证通过\n");
+});
+
+test("chooses the Infuse-compatible output filename", () => {
+  assert.equal(outputPathFor("Show S01E01.en.srt"), "Show S01E01.zh-CN.srt");
+  assert.equal(outputPathFor("Show S01E01.srt"), "Show S01E01.zh-CN.srt");
+});
+
+test("writes atomically and never overwrites generated output", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "gss-nas-test-"));
+  const source = path.join(root, "Show S01E01.en.srt");
+  await writeFile(source, SAMPLE);
+  const translator = async () => ["第一次"];
+  const first = await processSrt(source, { translator });
+  assert.equal(first.status, "created");
+  assert.match(await readFile(first.outputPath, "utf8"), /第一次/);
+  const second = await processSrt(source, { translator: async () => ["不应写入"] });
+  assert.equal(second.status, "skipped");
+  assert.doesNotMatch(await readFile(first.outputPath, "utf8"), /不应写入/);
+});
+
+test("scan is restricted to its supplied root", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "gss-nas-scan-"));
+  await writeFile(path.join(root, "Example.srt"), SAMPLE);
+  const results = await scanOnce(root, { translator: async () => ["示例"] });
+  assert.equal(results.length, 1);
+  assert.equal(results[0].status, "created");
+});

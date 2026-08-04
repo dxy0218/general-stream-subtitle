@@ -1,0 +1,15 @@
+services:
+  subtitle-companion:
+    build: .
+    container_name: gss-nas-test
+    restart: unless-stopped
+    environment:
+      MEDIA_ROOT: /media
+      SCAN_INTERVAL_SECONDS: "600"
+      SOURCE_LANGUAGE: en
+      TARGET_LANGUAGE: zh-CN
+      SUBTITLE_MODE: bilingual
+    volumes:
+      - /volume1/homes/dxy1234/Videos/_FilmSubtitles_NAS_Test:/media
+    cpus: 1.0
+    mem_limit: 1g
