@@ -3,7 +3,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { decodeSubtitle, looksChinese, outputPathFor, parseSrt, processSrt, renderSrt, requestGoogle, scanOnce } from "../nas-companion/index.mjs";
+import { decodeSubtitle, looksChinese, outputPathFor, parseSrt, pickEmbeddedTextStream, processSrt, renderSrt, requestGoogle, scanOnce } from "../nas-companion/index.mjs";
 
 const SAMPLE = "1\n00:00:01,000 --> 00:00:02,000\nNAS upload smoke OK\n";
 
@@ -21,6 +21,26 @@ test("chooses the Infuse-compatible output filename", () => {
 test("detects an existing Chinese subtitle body", () => {
   assert.equal(looksChinese("这是一段已经存在的中文字幕内容。"), true);
   assert.equal(looksChinese("This is an existing English subtitle body."), false);
+});
+
+test("selects non-Chinese embedded text subtitles in any language", () => {
+  const streams = [
+    { index: 1, codec_name: "subrip", tags: { language: "zho" } },
+    { index: 2, codec_name: "hdmv_pgs_subtitle", tags: { language: "jpn" } },
+    { index: 3, codec_name: "subrip", tags: { language: "fra" } },
+  ];
+  assert.equal(pickEmbeddedTextStream(streams)?.index, 3);
+  assert.equal(pickEmbeddedTextStream([{ index: 4, codec_name: "subrip", tags: { language: "zh-Hans" } }]), undefined);
+});
+
+test("auto-detects the source language for non-Chinese subtitles", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "gss-nas-multilingual-"));
+  const source = path.join(root, "Show S01E01.srt");
+  await writeFile(source, "1\n00:00:01,000 --> 00:00:02,000\nBonjour tout le monde\n");
+  let receivedSource;
+  const result = await processSrt(source, { translator: async (_texts, language) => { receivedSource = language; return ["大家好"]; } });
+  assert.equal(result.status, "created");
+  assert.equal(receivedSource, "auto");
 });
 
 test("decodes UTF-16 subtitles before parsing", () => {

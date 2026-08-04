@@ -37,6 +37,14 @@ export function looksChinese(text) {
   return han >= 8 && han / Math.max(letters, 1) >= 0.2;
 }
 
+export function pickEmbeddedTextStream(streams) {
+  return (streams || []).find((item) => {
+    if (!TEXT_SUBTITLE_CODECS.has(item.codec_name)) return false;
+    const language = String(item.tags?.language || "").trim().toLowerCase();
+    return language && !language.startsWith("zh") && !["chi", "zho", "cmn", "chs", "cht", "chinese"].includes(language);
+  }) || (streams || []).find((item) => TEXT_SUBTITLE_CODECS.has(item.codec_name) && !item.tags?.language);
+}
+
 export function decodeSubtitle(buffer) {
   const input = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
   if (input.length >= 2 && input[0] === 0xff && input[1] === 0xfe) {
@@ -165,7 +173,7 @@ function parseMarkedTranslation(text, batch) {
   return batch.every((item) => result.has(item.index)) ? batch.map((item) => result.get(item.index)) : null;
 }
 
-export async function translateGoogle(texts, source = "en", target = "zh-CN") {
+export async function translateGoogle(texts, source = "auto", target = "zh-CN") {
   const translations = new Array(texts.length).fill("");
   for (const batch of makeBatches(texts)) {
     const nonEmpty = batch.filter((item) => item.text.trim());
@@ -194,7 +202,7 @@ export async function processSrt(sourcePath, options = {}) {
   }
   if (looksChinese(cues.map((cue) => cue.text).join("\n"))) return { status: "skipped", reason: "source-looks-chinese", sourcePath, outputPath };
   const translator = options.translator || translateGoogle;
-  const translations = await translator(cues.map((cue) => cue.text), options.sourceLanguage || "en", options.targetLanguage || "zh-CN");
+  const translations = await translator(cues.map((cue) => cue.text), options.sourceLanguage || "auto", options.targetLanguage || "zh-CN");
   const rendered = renderSrt(cues, translations, options.mode || "bilingual");
   const temporaryPath = `${outputPath}.gss-tmp-${process.pid}`;
   await fs.writeFile(temporaryPath, rendered, { encoding: "utf8", flag: "wx" });
@@ -205,7 +213,7 @@ export async function processSrt(sourcePath, options = {}) {
 async function extractEmbeddedSubtitle(videoPath) {
   const raw = await execFileAsync("ffprobe", ["-v", "error", "-select_streams", "s", "-show_entries", "stream=index,codec_name:stream_tags=language", "-of", "json", videoPath]);
   const streams = JSON.parse(raw).streams || [];
-  const stream = streams.find((item) => TEXT_SUBTITLE_CODECS.has(item.codec_name) && ["en", "eng", "english", undefined].includes(item.tags?.language));
+  const stream = pickEmbeddedTextStream(streams);
   if (!stream) return null;
   const extractedPath = `${videoPath}.gss-extracted-${process.pid}.srt`;
   await execFileAsync("ffmpeg", ["-v", "error", "-y", "-i", videoPath, "-map", `0:${stream.index}`, extractedPath]);
@@ -277,7 +285,7 @@ async function main() {
   const maxNewOutputs = Math.max(0, Number(process.env.MAX_NEW_OUTPUTS || 10));
   const options = {
     mode: process.env.SUBTITLE_MODE === "translated" ? "translated" : "bilingual",
-    sourceLanguage: process.env.SOURCE_LANGUAGE || "en",
+    sourceLanguage: process.env.SOURCE_LANGUAGE || "auto",
     targetLanguage: process.env.TARGET_LANGUAGE || "zh-CN",
     requireVideoMatch: true,
     maxTranslationFailures: Math.max(1, Number(process.env.MAX_TRANSLATION_FAILURES_PER_SCAN || 3)),
