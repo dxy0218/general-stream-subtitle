@@ -19,6 +19,8 @@ Container port `8787` serves a read-only dashboard and JSON endpoint:
 
 The dashboard refreshes every three seconds and shows discovered external-text progress, cumulative output, current file, batch progress, failures, the next scan time, and the ten most recent outputs. It never exposes subtitle text, relay credentials, or media contents. Embedded subtitle tracks are discovered incrementally, so the percentage is explicitly scoped to currently discovered text-subtitle work.
 
+Store `{ "username": "...", "password": "..." }` in the private `/config/dashboard-auth.json` file (or set `DASHBOARD_USERNAME` and `DASHBOARD_PASSWORD`) to require HTTP Basic authentication. Put the dashboard behind the DSM HTTPS reverse proxy before making it reachable outside the trusted LAN.
+
 Publishing port `8787` makes it reachable on NAS network interfaces. Do not forward it to the public internet without adding authentication through a trusted reverse proxy.
 
 The container is not privileged. It runs as the container's default user so Synology bind-mount ACLs can create the new subtitle.

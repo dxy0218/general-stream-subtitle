@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { timingSafeEqual } from "node:crypto";
 import { promises as fs } from "node:fs";
 import { createServer } from "node:http";
 import path from "node:path";
@@ -149,9 +150,26 @@ export function startStatusServer(getStatus, options = {}) {
   const host = options.host || "0.0.0.0";
   const port = Number(options.port ?? 8787);
   const html = dashboardHtml();
+  const username = String(options.username || "");
+  const password = String(options.password || "");
+  const authorized = (request) => {
+    if (!username || !password) return true;
+    const authorization = String(request.headers.authorization || "");
+    if (!authorization.startsWith("Basic ")) return false;
+    let supplied;
+    try { supplied = Buffer.from(authorization.slice(6), "base64").toString("utf8"); } catch { return false; }
+    const expected = Buffer.from(`${username}:${password}`);
+    const received = Buffer.from(supplied);
+    return expected.length === received.length && timingSafeEqual(expected, received);
+  };
   const server = createServer((request, response) => {
     response.setHeader("cache-control", "no-store");
     response.setHeader("x-content-type-options", "nosniff");
+    if (!authorized(request)) {
+      response.writeHead(401, { "content-type": "text/plain; charset=utf-8", "www-authenticate": 'Basic realm="GSS Progress", charset="UTF-8"' });
+      response.end("Authentication required\n");
+      return;
+    }
     if (request.url === "/api/status") {
       response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
       response.end(JSON.stringify(getStatus()));
@@ -405,7 +423,9 @@ async function main() {
   };
   const statusPort = Math.max(0, Number(process.env.STATUS_PORT || 8787));
   if (statusPort > 0) {
-    const server = startStatusServer(() => runtime, { port: statusPort, host: process.env.STATUS_HOST || "0.0.0.0" });
+    let dashboardAuth = { username: process.env.DASHBOARD_USERNAME, password: process.env.DASHBOARD_PASSWORD };
+    try { dashboardAuth = { ...dashboardAuth, ...JSON.parse(await fs.readFile(process.env.DASHBOARD_AUTH_PATH || "/config/dashboard-auth.json", "utf8")) }; } catch {}
+    const server = startStatusServer(() => runtime, { port: statusPort, host: process.env.STATUS_HOST || "0.0.0.0", ...dashboardAuth });
     server.on("listening", () => console.log(JSON.stringify({ time: new Date().toISOString(), statusPage: `http://${process.env.STATUS_HOST || "0.0.0.0"}:${statusPort}` })));
   }
   await fs.mkdir(path.dirname(statePath), { recursive: true });

@@ -3,7 +3,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { buildExternalInventory, dashboardHtml, decodeSubtitle, looksChinese, outputPathFor, parseSrt, pickEmbeddedTextStream, processSrt, renderSrt, requestGoogle, scanOnce, updateFailureLedger } from "../nas-companion/index.mjs";
+import { buildExternalInventory, dashboardHtml, decodeSubtitle, looksChinese, outputPathFor, parseSrt, pickEmbeddedTextStream, processSrt, renderSrt, requestGoogle, scanOnce, startStatusServer, updateFailureLedger } from "../nas-companion/index.mjs";
 
 const SAMPLE = "1\n00:00:01,000 --> 00:00:02,000\nNAS upload smoke OK\n";
 
@@ -181,6 +181,22 @@ test("renders a dashboard without embedding subtitle content", () => {
   assert.match(html, /字幕翻译进度/);
   assert.match(html, /api\/status/);
   assert.doesNotMatch(html, /TRANSLATION_RELAY_TOKEN/);
+});
+
+test("protects the dashboard and status API with Basic authentication", async () => {
+  const server = startStatusServer(() => ({ created: 7 }), { host: "127.0.0.1", port: 0, username: "viewer", password: "secret" });
+  await new Promise((resolve) => server.once("listening", resolve));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const denied = await fetch(`${base}/api/status`);
+    assert.equal(denied.status, 401);
+    assert.match(denied.headers.get("www-authenticate"), /^Basic /);
+    const allowed = await fetch(`${base}/api/status`, { headers: { authorization: `Basic ${Buffer.from("viewer:secret").toString("base64")}` } });
+    assert.equal(allowed.status, 200);
+    assert.deepEqual(await allowed.json(), { created: 7 });
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
 });
 
 test("scan pauses after the translation failure limit", async () => {
