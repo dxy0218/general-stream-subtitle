@@ -3,7 +3,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { looksChinese, outputPathFor, parseSrt, processSrt, renderSrt, scanOnce } from "../nas-companion/index.mjs";
+import { decodeSubtitle, looksChinese, outputPathFor, parseSrt, processSrt, renderSrt, scanOnce } from "../nas-companion/index.mjs";
 
 const SAMPLE = "1\n00:00:01,000 --> 00:00:02,000\nNAS upload smoke OK\n";
 
@@ -21,6 +21,32 @@ test("chooses the Infuse-compatible output filename", () => {
 test("detects an existing Chinese subtitle body", () => {
   assert.equal(looksChinese("这是一段已经存在的中文字幕内容。"), true);
   assert.equal(looksChinese("This is an existing English subtitle body."), false);
+});
+
+test("decodes UTF-16 subtitles before parsing", () => {
+  const utf16 = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(SAMPLE, "utf16le")]);
+  assert.equal(decodeSubtitle(utf16), SAMPLE);
+  assert.equal(parseSrt(decodeSubtitle(utf16))[0].text, "NAS upload smoke OK");
+});
+
+test("skips an existing UTF-16 Chinese subtitle", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "gss-nas-utf16-"));
+  const source = path.join(root, "Show S01E01.srt");
+  const body = "1\n00:00:01,000 --> 00:00:02,000\n这是一段已经存在的中文字幕内容。\n";
+  await writeFile(source, Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(body, "utf16le")]));
+  const result = await processSrt(source, { translator: async () => { throw new Error("translator must not run"); } });
+  assert.equal(result.status, "skipped");
+  assert.equal(result.reason, "source-looks-chinese");
+});
+
+test("translates a UTF-16 English subtitle into UTF-8", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "gss-nas-utf16-"));
+  const source = path.join(root, "Show S01E01.en.srt");
+  await writeFile(source, Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(SAMPLE, "utf16le")]));
+  const result = await processSrt(source, { translator: async () => ["UTF-16 翻译正常"] });
+  const output = await readFile(result.outputPath);
+  assert.equal(output.includes(0), false);
+  assert.match(output.toString("utf8"), /NAS upload smoke OK\nUTF-16 翻译正常/);
 });
 
 test("writes atomically and never overwrites generated output", async () => {

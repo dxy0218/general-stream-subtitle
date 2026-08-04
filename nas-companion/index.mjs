@@ -37,6 +37,37 @@ export function looksChinese(text) {
   return han >= 8 && han / Math.max(letters, 1) >= 0.2;
 }
 
+export function decodeSubtitle(buffer) {
+  const input = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
+  if (input.length >= 2 && input[0] === 0xff && input[1] === 0xfe) {
+    return input.subarray(2).toString("utf16le").replace(/^\uFEFF/, "");
+  }
+  if (input.length >= 2 && input[0] === 0xfe && input[1] === 0xff) {
+    const body = Buffer.from(input.subarray(2, input.length - (input.length % 2)));
+    body.swap16();
+    return body.toString("utf16le").replace(/^\uFEFF/, "");
+  }
+  if (input.length >= 3 && input[0] === 0xef && input[1] === 0xbb && input[2] === 0xbf) {
+    return input.subarray(3).toString("utf8");
+  }
+
+  const sampleLength = Math.min(input.length - (input.length % 2), 4096);
+  let evenNulls = 0;
+  let oddNulls = 0;
+  for (let index = 0; index < sampleLength; index += 2) {
+    if (input[index] === 0) evenNulls += 1;
+    if (input[index + 1] === 0) oddNulls += 1;
+  }
+  const pairs = Math.max(1, sampleLength / 2);
+  if (oddNulls / pairs > 0.2 && evenNulls / pairs < 0.05) return input.toString("utf16le");
+  if (evenNulls / pairs > 0.2 && oddNulls / pairs < 0.05) {
+    const body = Buffer.from(input.subarray(0, input.length - (input.length % 2)));
+    body.swap16();
+    return body.toString("utf16le");
+  }
+  return input.toString("utf8").replace(/^\uFEFF/, "");
+}
+
 async function exists(filePath) {
   try { await fs.access(filePath); return true; } catch { return false; }
 }
@@ -120,7 +151,7 @@ export async function translateGoogle(texts, source = "en", target = "zh-CN") {
 export async function processSrt(sourcePath, options = {}) {
   const outputPath = options.outputPath || outputPathFor(sourcePath);
   if (outputPath === sourcePath || await exists(outputPath)) return { status: "skipped", sourcePath, outputPath };
-  const cues = parseSrt(await fs.readFile(sourcePath, "utf8"));
+  const cues = parseSrt(decodeSubtitle(await fs.readFile(sourcePath)));
   if (looksChinese(cues.map((cue) => cue.text).join("\n"))) return { status: "skipped", reason: "source-looks-chinese", sourcePath, outputPath };
   const translator = options.translator || translateGoogle;
   const translations = await translator(cues.map((cue) => cue.text), options.sourceLanguage || "en", options.targetLanguage || "zh-CN");
