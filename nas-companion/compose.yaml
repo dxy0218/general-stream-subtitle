@@ -12,7 +12,9 @@ services:
       MAX_NEW_OUTPUTS: "10"
       MAX_EMBEDDED_PROBES_PER_SCAN: "20"
       STATE_PATH: /config/state.json
+      GSS_BUILD_REV: live-mounted
     volumes:
       - /volume1/homes/dxy1234/Videos:/media
       - /volume1/docker/gss-nas-test/config:/config
+      - /volume1/docker/gss-nas-test/index.mjs:/app/index.mjs:ro
     mem_limit: 1g

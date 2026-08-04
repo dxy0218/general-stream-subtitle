@@ -6,6 +6,8 @@ For the Synology pilot deployment, copy this directory into a Container Manager 
 
 `/volume1/homes/dxy1234/Videos`
 
+The project also mounts `/volume1/docker/gss-nas-test/index.mjs` read-only at `/app/index.mjs`, preventing DSM image caching from retaining stale pilot code.
+
 The service does not delete or modify original media/subtitles. Its only media-library write is a new `*.zh-CN.srt` beside the source. Pilot state is stored in `/volume1/docker/gss-nas-test/config/state.json`, and `MAX_NEW_OUTPUTS=10` prevents the first run from creating more than ten subtitles across restarts.
 
 The container is not privileged. It runs as the container's default user so Synology bind-mount ACLs can create the new subtitle.

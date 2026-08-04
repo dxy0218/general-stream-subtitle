@@ -257,7 +257,7 @@ async function main() {
       const temporaryState = `${statePath}.tmp-${process.pid}`;
       await fs.writeFile(temporaryState, JSON.stringify(state, null, 2) + "\n", "utf8");
       await fs.rename(temporaryState, statePath);
-      console.log(JSON.stringify({ time: state.updatedAt, scanned: root, pilotLimit: maxNewOutputs, created: state.created, results }));
+      console.log(JSON.stringify({ time: state.updatedAt, revision: process.env.GSS_BUILD_REV || "image", scanned: root, pilotLimit: maxNewOutputs, created: state.created, results }));
     } catch (error) {
       console.error(JSON.stringify({ time: new Date().toISOString(), error: error.message }));
     }
