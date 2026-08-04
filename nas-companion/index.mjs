@@ -65,7 +65,15 @@ export function decodeSubtitle(buffer) {
     body.swap16();
     return body.toString("utf16le");
   }
-  return input.toString("utf8").replace(/^\uFEFF/, "");
+  const utf8 = input.toString("utf8").replace(/^\uFEFF/, "");
+  const replacementCharacters = (utf8.match(/\uFFFD/g) || []).length;
+  if (replacementCharacters >= 8 && replacementCharacters / Math.max(input.length, 1) >= 0.005) {
+    try {
+      const legacyChinese = new TextDecoder("gb18030", { fatal: true }).decode(input);
+      if (looksChinese(legacyChinese)) return legacyChinese;
+    } catch {}
+  }
+  return utf8;
 }
 
 async function exists(filePath) {

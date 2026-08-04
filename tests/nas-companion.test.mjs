@@ -49,6 +49,18 @@ test("translates a UTF-16 English subtitle into UTF-8", async () => {
   assert.match(output.toString("utf8"), /NAS upload smoke OK\nUTF-16 翻译正常/);
 });
 
+test("decodes and skips an existing GB18030 Chinese subtitle", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "gss-nas-gb18030-"));
+  const source = path.join(root, "Show S01E01.srt");
+  const prefix = Buffer.from("1\n00:00:01,000 --> 00:00:02,000\n", "ascii");
+  const chinese = Buffer.from("d6d0cec4d7d6c4bbd6d0cec4d7d6c4bb", "hex");
+  await writeFile(source, Buffer.concat([prefix, chinese, Buffer.from("\n")]));
+  assert.match(decodeSubtitle(await readFile(source)), /中文字幕中文字幕/);
+  const result = await processSrt(source, { translator: async () => { throw new Error("translator must not run"); } });
+  assert.equal(result.status, "skipped");
+  assert.equal(result.reason, "source-looks-chinese");
+});
+
 test("skips ASS content mislabeled with an SRT extension", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "gss-nas-format-"));
   const source = path.join(root, "Show S01E01.srt");
