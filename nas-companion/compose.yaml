@@ -11,6 +11,7 @@ services:
       SUBTITLE_MODE: bilingual
       MAX_NEW_OUTPUTS: "10"
       MAX_EMBEDDED_PROBES_PER_SCAN: "20"
+      MAX_TRANSLATION_FAILURES_PER_SCAN: "3"
       STATE_PATH: /config/state.json
       GSS_BUILD_REV: live-mounted
     volumes:

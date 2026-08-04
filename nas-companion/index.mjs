@@ -166,6 +166,9 @@ export async function processSrt(sourcePath, options = {}) {
   const outputPath = options.outputPath || outputPathFor(sourcePath);
   if (outputPath === sourcePath || await exists(outputPath)) return { status: "skipped", sourcePath, outputPath };
   const cues = parseSrt(decodeSubtitle(await fs.readFile(sourcePath)));
+  if (!cues.some((cue) => Number.isInteger(cue.timeIndex) && cue.timeIndex >= 0 && cue.text)) {
+    return { status: "skipped", reason: "unsupported-or-invalid-srt", sourcePath, outputPath };
+  }
   if (looksChinese(cues.map((cue) => cue.text).join("\n"))) return { status: "skipped", reason: "source-looks-chinese", sourcePath, outputPath };
   const translator = options.translator || translateGoogle;
   const translations = await translator(cues.map((cue) => cue.text), options.sourceLanguage || "en", options.targetLanguage || "zh-CN");
@@ -196,6 +199,8 @@ export async function scanOnce(root, options = {}) {
     .filter((file) => !options.requireVideoMatch || videoStems.has(file.replace(SOURCE_SUFFIX, "")))
     .sort((left, right) => Number(!/\.(?:en|eng|english)\.srt$/i.test(left)) - Number(!/\.(?:en|eng|english)\.srt$/i.test(right)) || left.localeCompare(right));
   let remaining = Number.isFinite(options.maxNewOutputs) ? Math.max(0, options.maxNewOutputs) : Infinity;
+  let translationFailures = 0;
+  const maxTranslationFailures = Math.max(1, Number(options.maxTranslationFailures ?? 3));
   for (const sourcePath of sources) {
     if (remaining <= 0) break;
     try {
@@ -204,7 +209,14 @@ export async function scanOnce(root, options = {}) {
       if (result.status === "created") remaining -= 1;
     } catch (error) {
       results.push({ status: "failed", sourcePath, error: error.message });
+      translationFailures += 1;
+      if (translationFailures >= maxTranslationFailures) break;
     }
+  }
+
+  if (translationFailures >= maxTranslationFailures) {
+    results.push({ status: "paused", reason: "translation-failure-limit", failures: translationFailures });
+    return results;
   }
 
   let embeddedProbes = 0;
@@ -226,6 +238,8 @@ export async function scanOnce(root, options = {}) {
       }
     } catch (error) {
       results.push({ status: "failed", sourcePath: videoPath, error: error.message });
+      translationFailures += 1;
+      if (translationFailures >= maxTranslationFailures) break;
     } finally {
       if (extractedPath) await fs.rm(extractedPath, { force: true });
     }
@@ -243,6 +257,7 @@ async function main() {
     sourceLanguage: process.env.SOURCE_LANGUAGE || "en",
     targetLanguage: process.env.TARGET_LANGUAGE || "zh-CN",
     requireVideoMatch: true,
+    maxTranslationFailures: Math.max(1, Number(process.env.MAX_TRANSLATION_FAILURES_PER_SCAN || 3)),
     maxEmbeddedProbes: Math.max(0, Number(process.env.MAX_EMBEDDED_PROBES_PER_SCAN || 20))
   };
   await fs.mkdir(path.dirname(statePath), { recursive: true });

@@ -49,6 +49,16 @@ test("translates a UTF-16 English subtitle into UTF-8", async () => {
   assert.match(output.toString("utf8"), /NAS upload smoke OK\nUTF-16 翻译正常/);
 });
 
+test("skips ASS content mislabeled with an SRT extension", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "gss-nas-format-"));
+  const source = path.join(root, "Show S01E01.srt");
+  await writeFile(source, "[Script Info]\nScriptType: v4.00+\n\n[Events]\nDialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Hello\n");
+  const result = await processSrt(source, { translator: async () => { throw new Error("translator must not run"); } });
+  assert.equal(result.status, "skipped");
+  assert.equal(result.reason, "unsupported-or-invalid-srt");
+  await assert.rejects(readFile(result.outputPath));
+});
+
 test("falls back to the second Google compatibility endpoint", async () => {
   const originalFetch = globalThis.fetch;
   const requested = [];
@@ -93,4 +103,18 @@ test("pilot limit caps newly created outputs", async () => {
   await writeFile(path.join(root, "Two.srt"), SAMPLE);
   const results = await scanOnce(root, { translator: async () => ["示例"], maxNewOutputs: 1 });
   assert.equal(results.filter((result) => result.status === "created").length, 1);
+});
+
+test("scan pauses after the translation failure limit", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "gss-nas-failure-limit-"));
+  await writeFile(path.join(root, "One.srt"), SAMPLE);
+  await writeFile(path.join(root, "Two.srt"), SAMPLE);
+  await writeFile(path.join(root, "Three.srt"), SAMPLE);
+  let attempts = 0;
+  const results = await scanOnce(root, {
+    translator: async () => { attempts += 1; throw new Error("network unavailable"); },
+    maxTranslationFailures: 2
+  });
+  assert.equal(attempts, 2);
+  assert.deepEqual(results.at(-1), { status: "paused", reason: "translation-failure-limit", failures: 2 });
 });
