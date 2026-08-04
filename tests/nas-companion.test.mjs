@@ -3,7 +3,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { decodeSubtitle, looksChinese, outputPathFor, parseSrt, pickEmbeddedTextStream, processSrt, renderSrt, requestGoogle, scanOnce, updateFailureLedger } from "../nas-companion/index.mjs";
+import { buildExternalInventory, dashboardHtml, decodeSubtitle, looksChinese, outputPathFor, parseSrt, pickEmbeddedTextStream, processSrt, renderSrt, requestGoogle, scanOnce, updateFailureLedger } from "../nas-companion/index.mjs";
 
 const SAMPLE = "1\n00:00:01,000 --> 00:00:02,000\nNAS upload smoke OK\n";
 
@@ -158,6 +158,29 @@ test("pilot limit caps newly created outputs", async () => {
   await writeFile(path.join(root, "Two.srt"), SAMPLE);
   const results = await scanOnce(root, { translator: async () => ["示例"], maxNewOutputs: 1 });
   assert.equal(results.filter((result) => result.status === "created").length, 1);
+});
+
+test("builds a safe external subtitle progress inventory", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "gss-nas-inventory-"));
+  const completed = path.join(root, "Complete.srt");
+  const pending = path.join(root, "Pending.srt");
+  const chinese = path.join(root, "Chinese.srt");
+  const invalid = path.join(root, "Invalid.srt");
+  await writeFile(completed, SAMPLE);
+  await writeFile(outputPathFor(completed), "already translated");
+  await writeFile(pending, SAMPLE);
+  await writeFile(chinese, "1\n00:00:01,000 --> 00:00:02,000\n这是一段已经存在的中文字幕内容。\n");
+  await writeFile(invalid, "not an srt");
+  assert.deepEqual(await buildExternalInventory([completed, pending, chinese, invalid]), {
+    total: 2, completed: 1, pending: 1, skippedChinese: 1, invalid: 1
+  });
+});
+
+test("renders a dashboard without embedding subtitle content", () => {
+  const html = dashboardHtml();
+  assert.match(html, /字幕翻译进度/);
+  assert.match(html, /api\/status/);
+  assert.doesNotMatch(html, /TRANSLATION_RELAY_TOKEN/);
 });
 
 test("scan pauses after the translation failure limit", async () => {

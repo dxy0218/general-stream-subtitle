@@ -18,6 +18,10 @@ services:
       MAX_FAILURE_ATTEMPTS: "3"
       STATE_PATH: /config/state.json
       GSS_BUILD_REV: live-mounted
+      STATUS_PORT: "8787"
+      STATUS_HOST: 0.0.0.0
+    ports:
+      - "8787:8787"
     volumes:
       - /volume1/homes/dxy1234/Videos:/media
       - /volume1/docker/gss-nas-test/config:/config

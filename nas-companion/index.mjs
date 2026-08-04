@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { promises as fs } from "node:fs";
+import { createServer } from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -96,6 +97,76 @@ async function walk(root) {
     else output.push(fullPath);
   }
   return output;
+}
+
+export async function buildExternalInventory(sources) {
+  const tasks = new Map();
+  for (const sourcePath of sources) {
+    const outputPath = outputPathFor(sourcePath);
+    if (!tasks.has(outputPath)) tasks.set(outputPath, sourcePath);
+  }
+  const inventory = { total: 0, completed: 0, pending: 0, skippedChinese: 0, invalid: 0 };
+  for (const [outputPath, sourcePath] of tasks) {
+    try {
+      const cues = parseSrt(decodeSubtitle(await fs.readFile(sourcePath)));
+      if (!cues.some((cue) => Number.isInteger(cue.timeIndex) && cue.timeIndex >= 0 && cue.text)) {
+        inventory.invalid += 1;
+        continue;
+      }
+      if (looksChinese(cues.map((cue) => cue.text).join("\n"))) {
+        inventory.skippedChinese += 1;
+        continue;
+      }
+      inventory.total += 1;
+      if (await exists(outputPath)) inventory.completed += 1;
+      else inventory.pending += 1;
+    } catch {
+      inventory.invalid += 1;
+    }
+  }
+  return inventory;
+}
+
+export function dashboardHtml() {
+  return `<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>字幕翻译进度</title><style>
+:root{color-scheme:dark;font-family:ui-sans-serif,system-ui,-apple-system,"PingFang SC",sans-serif;background:#08111f;color:#e5eefc}*{box-sizing:border-box}body{margin:0;padding:24px;background:radial-gradient(circle at top,#16355c 0,#08111f 42%);min-height:100vh}.wrap{max-width:920px;margin:auto}.head{display:flex;justify-content:space-between;gap:16px;align-items:center;margin-bottom:20px}h1{font-size:28px;margin:0}.badge{padding:7px 12px;border-radius:999px;background:#17385f;color:#9bd4ff;font-weight:700}.card{background:#0f1d30dd;border:1px solid #28415f;border-radius:18px;padding:20px;margin:14px 0;box-shadow:0 14px 40px #0005}.row{display:flex;justify-content:space-between;gap:16px;align-items:end}.big{font-size:38px;font-weight:800}.muted{color:#92a7c2}.bar{height:18px;background:#243349;border-radius:999px;overflow:hidden;margin:16px 0 8px}.fill{height:100%;width:0;background:linear-gradient(90deg,#38bdf8,#34d399);transition:width .5s}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.stat{background:#12263e;border-radius:14px;padding:14px}.stat b{display:block;font-size:24px;margin-top:5px}.current{font-family:ui-monospace,monospace;word-break:break-all;color:#d8e9ff}.recent{margin:8px 0 0;padding-left:22px}.recent li{margin:7px 0;word-break:break-all}@media(max-width:680px){body{padding:14px}.grid{grid-template-columns:repeat(2,1fr)}.row{align-items:start;flex-direction:column}.big{font-size:32px}}
+</style></head><body><main class="wrap"><div class="head"><h1>字幕翻译进度</h1><span class="badge" id="phase">连接中</span></div>
+<section class="card"><div class="row"><div><div class="muted">已发现文字字幕任务</div><div class="big"><span id="done">—</span> / <span id="total">—</span></div></div><div class="muted" id="updated">尚未更新</div></div><div class="bar"><div class="fill" id="fill"></div></div><div class="muted" id="percent">正在读取状态…</div></section>
+<section class="grid"><div class="stat"><span class="muted">累计新建</span><b id="created">—</b></div><div class="stat"><span class="muted">本轮完成</span><b id="batch">—</b></div><div class="stat"><span class="muted">跳过中文</span><b id="chinese">—</b></div><div class="stat"><span class="muted">失败/延期</span><b id="failures">—</b></div></section>
+<section class="card"><div class="muted">当前处理</div><p class="current" id="current">等待下一轮</p><div class="muted" id="next"></div></section>
+<section class="card"><div class="muted">最近完成</div><ol class="recent" id="recent"></ol></section>
+<p class="muted">这里只显示文件名和计数，不读取或展示字幕正文。内嵌字幕仍在逐批发现，因此本进度条表示当前已发现的文字字幕任务。</p></main>
+<script>
+const $=id=>document.getElementById(id);const phaseNames={starting:'启动中',scanning:'扫描中',inventory:'盘点中',translating:'翻译中',sleeping:'等待下一轮',error:'发生错误'};
+function time(value){if(!value)return '—';return new Date(value).toLocaleString('zh-CN',{hour12:false})}
+async function refresh(){try{const s=await fetch('./api/status',{cache:'no-store'}).then(r=>r.json());const i=s.inventory||{};const done=Number(i.completed||0)+Number(s.batchCreated||0);const total=Number(i.total||0);const pct=total?Math.min(100,done/total*100):0;$('phase').textContent=phaseNames[s.phase]||s.phase||'运行中';$('done').textContent=done;$('total').textContent=total;$('fill').style.width=pct+'%';$('percent').textContent=total?pct.toFixed(1)+'% · 待处理 '+Math.max(0,total-done):'正在盘点任务';$('created').textContent=s.created??0;$('batch').textContent=(s.batchCreated??0)+' / '+(s.perScanLimit??10);$('chinese').textContent=i.skippedChinese??0;$('failures').textContent=(s.failureCount??0)+' / '+(s.deferredFailures??0);$('current').textContent=s.currentPath||'等待下一轮';$('updated').textContent='最近更新：'+time(s.updatedAt);$('next').textContent=s.nextScanAt?'下一轮预计：'+time(s.nextScanAt):'';const list=$('recent');list.replaceChildren(...(s.recent||[]).map(value=>{const li=document.createElement('li');li.textContent=value;return li;}));}catch{$('phase').textContent='连接失败'}}refresh();setInterval(refresh,3000);
+</script></body></html>`;
+}
+
+export function startStatusServer(getStatus, options = {}) {
+  const host = options.host || "0.0.0.0";
+  const port = Number(options.port ?? 8787);
+  const html = dashboardHtml();
+  const server = createServer((request, response) => {
+    response.setHeader("cache-control", "no-store");
+    response.setHeader("x-content-type-options", "nosniff");
+    if (request.url === "/api/status") {
+      response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+      response.end(JSON.stringify(getStatus()));
+      return;
+    }
+    if (request.url === "/" || request.url === "/index.html") {
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end(html);
+      return;
+    }
+    response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+    response.end("Not found\n");
+  });
+  server.listen(port, host);
+  return server;
 }
 
 function execFileAsync(command, args) {
@@ -230,15 +301,18 @@ export async function scanOnce(root, options = {}) {
     .filter((file) => !options.requireVideoMatch || videoStems.has(file.replace(SOURCE_SUFFIX, "")))
     .filter((file) => !options.skipPaths?.has(file))
     .sort((left, right) => Number(!/\.(?:en|eng|english)\.srt$/i.test(left)) - Number(!/\.(?:en|eng|english)\.srt$/i.test(right)) || left.localeCompare(right));
+  if (options.onInventory) options.onInventory(await buildExternalInventory(sources));
   let remaining = Number.isFinite(options.maxNewOutputs) ? Math.max(0, options.maxNewOutputs) : Infinity;
   let translationFailures = 0;
   const maxTranslationFailures = Math.max(1, Number(options.maxTranslationFailures ?? 3));
   for (const sourcePath of sources) {
     if (remaining <= 0) break;
     try {
+      options.onProgress?.({ phase: "translating", currentPath: sourcePath });
       const result = await processSrt(sourcePath, options);
       results.push(result);
       if (result.status === "created") remaining -= 1;
+      options.onProgress?.({ phase: "translating", currentPath: sourcePath, result });
     } catch (error) {
       results.push({ status: "failed", sourcePath, error: error.message });
       translationFailures += 1;
@@ -262,12 +336,14 @@ export async function scanOnce(root, options = {}) {
     if (sources.some((source) => source.replace(SOURCE_SUFFIX, "") === base)) continue;
     let extractedPath;
     try {
+      options.onProgress?.({ phase: "scanning", currentPath: videoPath });
       embeddedProbes += 1;
       extractedPath = await extractEmbeddedSubtitle(videoPath);
       if (extractedPath) {
         const result = await processSrt(extractedPath, { ...options, outputPath });
         results.push(result);
         if (result.status === "created") remaining -= 1;
+        options.onProgress?.({ phase: "translating", currentPath: videoPath, result });
       }
     } catch (error) {
       results.push({ status: "failed", sourcePath: videoPath, error: error.message });
@@ -314,23 +390,57 @@ async function main() {
     maxTranslationFailures: Math.max(1, Number(process.env.MAX_TRANSLATION_FAILURES_PER_SCAN || 3)),
     maxEmbeddedProbes: Math.max(0, Number(process.env.MAX_EMBEDDED_PROBES_PER_SCAN || 20))
   };
+  const runtime = {
+    revision: process.env.GSS_BUILD_REV || "image",
+    phase: "starting",
+    startedAt: new Date().toISOString(),
+    created: 0,
+    batchCreated: 0,
+    perScanLimit: maxNewOutputsPerScan,
+    inventory: null,
+    failureCount: 0,
+    deferredFailures: 0,
+    currentPath: null,
+    recent: []
+  };
+  const statusPort = Math.max(0, Number(process.env.STATUS_PORT || 8787));
+  if (statusPort > 0) {
+    const server = startStatusServer(() => runtime, { port: statusPort, host: process.env.STATUS_HOST || "0.0.0.0" });
+    server.on("listening", () => console.log(JSON.stringify({ time: new Date().toISOString(), statusPage: `http://${process.env.STATUS_HOST || "0.0.0.0"}:${statusPort}` })));
+  }
   await fs.mkdir(path.dirname(statePath), { recursive: true });
   for (;;) {
     try {
       let state = { created: 0, failures: {} };
       try { state = { ...state, ...JSON.parse(await fs.readFile(statePath, "utf8")) }; } catch {}
+      Object.assign(runtime, { phase: "scanning", created: Number(state.created || 0), batchCreated: 0, currentPath: null, updatedAt: state.updatedAt || null, inventory: state.inventory || runtime.inventory, recent: state.recent || runtime.recent });
       const remainingTotal = Math.max(0, maxTotalOutputs - Number(state.created || 0));
       const allowance = Math.min(maxNewOutputsPerScan, remainingTotal);
       const skipPaths = new Set(Object.entries(state.failures || {}).filter(([, failure]) => Number(failure?.attempts || 0) >= maxFailureAttempts).map(([sourcePath]) => sourcePath));
-      const results = allowance > 0 ? await scanOnce(root, { ...options, maxNewOutputs: allowance, skipPaths }) : [];
+      const results = allowance > 0 ? await scanOnce(root, {
+        ...options,
+        maxNewOutputs: allowance,
+        skipPaths,
+        onInventory: (inventory) => Object.assign(runtime, { phase: "inventory", inventory }),
+        onProgress: ({ phase, currentPath, result }) => {
+          runtime.phase = phase;
+          runtime.currentPath = currentPath ? path.relative(root, currentPath) : null;
+          if (result?.status === "created") runtime.batchCreated += 1;
+        }
+      }) : [];
       state.created = Number(state.created || 0) + results.filter((result) => result.status === "created").length;
       state.updatedAt = new Date().toISOString();
       state.failures = updateFailureLedger(state.failures, results, maxFailureAttempts, state.updatedAt);
+      state.inventory = runtime.inventory;
+      state.recent = (state.recent || []).concat(results.filter((result) => result.status === "created").map((result) => path.relative(root, result.outputPath))).slice(-10);
       const temporaryState = `${statePath}.tmp-${process.pid}`;
       await fs.writeFile(temporaryState, JSON.stringify(state, null, 2) + "\n", "utf8");
       await fs.rename(temporaryState, statePath);
+      const deferredFailures = Object.values(state.failures).filter((failure) => Number(failure?.attempts || 0) >= maxFailureAttempts).length;
+      Object.assign(runtime, { phase: "sleeping", created: state.created, batchCreated: results.filter((result) => result.status === "created").length, failureCount: Object.keys(state.failures).length, deferredFailures, currentPath: null, recent: state.recent, updatedAt: state.updatedAt, nextScanAt: new Date(Date.now() + intervalMs).toISOString() });
       console.log(JSON.stringify({ time: state.updatedAt, revision: process.env.GSS_BUILD_REV || "image", scanned: root, totalLimit: Number.isFinite(maxTotalOutputs) ? maxTotalOutputs : null, perScanLimit: maxNewOutputsPerScan, created: state.created, deferredFailures: Object.values(state.failures).filter((failure) => Number(failure?.attempts || 0) >= maxFailureAttempts).length, results }));
     } catch (error) {
+      Object.assign(runtime, { phase: "error", currentPath: null, lastError: error.message, updatedAt: new Date().toISOString(), nextScanAt: new Date(Date.now() + intervalMs).toISOString() });
       console.error(JSON.stringify({ time: new Date().toISOString(), error: error.message }));
     }
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
