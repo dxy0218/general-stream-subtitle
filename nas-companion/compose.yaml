@@ -3,6 +3,8 @@ services:
     build: .
     container_name: gss-nas-test
     restart: unless-stopped
+    env_file:
+      - /volume1/docker/gss-nas-test/config/relay.env
     environment:
       MEDIA_ROOT: /media
       SCAN_INTERVAL_SECONDS: "600"

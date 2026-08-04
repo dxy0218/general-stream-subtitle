@@ -94,6 +94,21 @@ function execFileAsync(command, args) {
 const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 export async function requestGoogle(text, source, target) {
+  if (process.env.TRANSLATION_RELAY_URL) {
+    const response = await fetch(process.env.TRANSLATION_RELAY_URL, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${process.env.TRANSLATION_RELAY_TOKEN || ""}`,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({ text, source, target }),
+      signal: AbortSignal.timeout(30_000)
+    });
+    if (!response.ok) throw new Error(`Translation relay failed with HTTP ${response.status}`);
+    const payload = await response.json();
+    if (typeof payload?.translation !== "string") throw new Error("Translation relay returned an invalid response");
+    return payload.translation;
+  }
   const endpoints = [
     "https://translate.googleapis.com/translate_a/single",
     "https://translate.google.com/translate_a/single"

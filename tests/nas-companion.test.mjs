@@ -76,6 +76,29 @@ test("falls back to the second Google compatibility endpoint", async () => {
   }
 });
 
+test("uses the authenticated private translation relay when configured", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalUrl = process.env.TRANSLATION_RELAY_URL;
+  const originalToken = process.env.TRANSLATION_RELAY_TOKEN;
+  let request;
+  process.env.TRANSLATION_RELAY_URL = "https://relay.example.test/v1/translate";
+  process.env.TRANSLATION_RELAY_TOKEN = "test-token";
+  globalThis.fetch = async (url, options) => {
+    request = { url: String(url), options };
+    return { ok: true, json: async () => ({ translation: "中转翻译成功" }) };
+  };
+  try {
+    assert.equal(await requestGoogle("translate me", "en", "zh-CN"), "中转翻译成功");
+    assert.equal(request.url, process.env.TRANSLATION_RELAY_URL);
+    assert.equal(request.options.headers.authorization, "Bearer test-token");
+    assert.deepEqual(JSON.parse(request.options.body), { text: "translate me", source: "en", target: "zh-CN" });
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalUrl === undefined) delete process.env.TRANSLATION_RELAY_URL; else process.env.TRANSLATION_RELAY_URL = originalUrl;
+    if (originalToken === undefined) delete process.env.TRANSLATION_RELAY_TOKEN; else process.env.TRANSLATION_RELAY_TOKEN = originalToken;
+  }
+});
+
 test("writes atomically and never overwrites generated output", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "gss-nas-test-"));
   const source = path.join(root, "Show S01E01.en.srt");

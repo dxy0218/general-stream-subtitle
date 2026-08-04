@@ -1,0 +1,11 @@
+https://107-175-239-52.sslip.io:8443 {
+  request_body {
+    max_size 64KB
+  }
+  header {
+    Strict-Transport-Security "max-age=31536000"
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "DENY"
+  }
+  reverse_proxy relay:3000
+}
