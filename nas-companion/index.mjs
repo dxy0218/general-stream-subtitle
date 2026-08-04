@@ -93,13 +93,27 @@ function execFileAsync(command, args) {
 
 const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-async function requestGoogle(text, source, target) {
-    const url = new URL("https://translate.googleapis.com/translate_a/single");
+export async function requestGoogle(text, source, target) {
+  const endpoints = [
+    "https://translate.googleapis.com/translate_a/single",
+    "https://translate.google.com/translate_a/single"
+  ];
+  const failures = [];
+  for (const endpoint of endpoints) {
+    const url = new URL(endpoint);
     url.search = new URLSearchParams({ client: "gtx", dt: "t", sl: source, tl: target, q: text });
-    const response = await fetch(url, { signal: AbortSignal.timeout(30_000) });
-    if (!response.ok) throw new Error(`Google translation failed with HTTP ${response.status}`);
-    const payload = await response.json();
-    return payload[0].map((part) => part?.[0] || "").join("");
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const payload = await response.json();
+      if (!Array.isArray(payload?.[0])) throw new Error("unexpected response");
+      return payload[0].map((part) => part?.[0] || "").join("");
+    } catch (error) {
+      const detail = error?.cause?.code || error?.cause?.message || error?.message || String(error);
+      failures.push(`${url.hostname}: ${detail}`);
+    }
+  }
+  throw new Error(`Google translation failed (${failures.join("; ")})`);
 }
 
 function makeBatches(texts, maxItems = 30, maxCharacters = 3500) {

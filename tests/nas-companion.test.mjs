@@ -3,7 +3,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { decodeSubtitle, looksChinese, outputPathFor, parseSrt, processSrt, renderSrt, scanOnce } from "../nas-companion/index.mjs";
+import { decodeSubtitle, looksChinese, outputPathFor, parseSrt, processSrt, renderSrt, requestGoogle, scanOnce } from "../nas-companion/index.mjs";
 
 const SAMPLE = "1\n00:00:01,000 --> 00:00:02,000\nNAS upload smoke OK\n";
 
@@ -47,6 +47,23 @@ test("translates a UTF-16 English subtitle into UTF-8", async () => {
   const output = await readFile(result.outputPath);
   assert.equal(output.includes(0), false);
   assert.match(output.toString("utf8"), /NAS upload smoke OK\nUTF-16 翻译正常/);
+});
+
+test("falls back to the second Google compatibility endpoint", async () => {
+  const originalFetch = globalThis.fetch;
+  const requested = [];
+  globalThis.fetch = async (url) => {
+    requested.push(String(url));
+    if (requested.length === 1) throw Object.assign(new Error("fetch failed"), { cause: { code: "ENOTFOUND" } });
+    return { ok: true, json: async () => [[['翻译成功']]] };
+  };
+  try {
+    assert.equal(await requestGoogle("translate me", "en", "zh-CN"), "翻译成功");
+    assert.match(requested[0], /^https:\/\/translate\.googleapis\.com\//);
+    assert.match(requested[1], /^https:\/\/translate\.google\.com\//);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("writes atomically and never overwrites generated output", async () => {
