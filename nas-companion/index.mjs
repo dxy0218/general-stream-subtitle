@@ -228,6 +228,7 @@ export async function scanOnce(root, options = {}) {
   const sources = files
     .filter((file) => SOURCE_SUFFIX.test(file) && !GENERATED_SUFFIX.test(file))
     .filter((file) => !options.requireVideoMatch || videoStems.has(file.replace(SOURCE_SUFFIX, "")))
+    .filter((file) => !options.skipPaths?.has(file))
     .sort((left, right) => Number(!/\.(?:en|eng|english)\.srt$/i.test(left)) - Number(!/\.(?:en|eng|english)\.srt$/i.test(right)) || left.localeCompare(right));
   let remaining = Number.isFinite(options.maxNewOutputs) ? Math.max(0, options.maxNewOutputs) : Infinity;
   let translationFailures = 0;
@@ -254,6 +255,7 @@ export async function scanOnce(root, options = {}) {
   const maxEmbeddedProbes = Math.max(0, Number(options.maxEmbeddedProbes ?? 20));
   for (const videoPath of videos) {
     if (remaining <= 0 || embeddedProbes >= maxEmbeddedProbes) break;
+    if (options.skipPaths?.has(videoPath)) continue;
     const outputPath = videoPath.replace(path.extname(videoPath), ".zh-CN.srt");
     if (await exists(outputPath)) continue;
     const base = videoPath.slice(0, -path.extname(videoPath).length);
@@ -278,11 +280,32 @@ export async function scanOnce(root, options = {}) {
   return results;
 }
 
+export function updateFailureLedger(ledger, results, maxAttempts = 3, now = new Date().toISOString()) {
+  const next = { ...(ledger || {}) };
+  for (const result of results || []) {
+    if (!result?.sourcePath) continue;
+    if (result.status === "failed") {
+      const previous = next[result.sourcePath] || {};
+      next[result.sourcePath] = {
+        attempts: Math.min(maxAttempts, Number(previous.attempts || 0) + 1),
+        lastError: String(result.error || "unknown failure").slice(0, 500),
+        lastAttemptAt: now
+      };
+    } else if (result.status === "created" || result.status === "skipped") {
+      delete next[result.sourcePath];
+    }
+  }
+  return next;
+}
+
 async function main() {
   const root = process.env.MEDIA_ROOT || "/media";
   const statePath = process.env.STATE_PATH || "/config/state.json";
   const intervalMs = Math.max(60, Number(process.env.SCAN_INTERVAL_SECONDS || 600)) * 1000;
-  const maxNewOutputs = Math.max(0, Number(process.env.MAX_NEW_OUTPUTS || 10));
+  const configuredTotalLimit = Math.max(0, Number(process.env.MAX_NEW_OUTPUTS || 0));
+  const maxTotalOutputs = configuredTotalLimit > 0 ? configuredTotalLimit : Infinity;
+  const maxNewOutputsPerScan = Math.max(1, Number(process.env.MAX_NEW_OUTPUTS_PER_SCAN || 10));
+  const maxFailureAttempts = Math.max(1, Number(process.env.MAX_FAILURE_ATTEMPTS || 3));
   const options = {
     mode: process.env.SUBTITLE_MODE === "translated" ? "translated" : "bilingual",
     sourceLanguage: process.env.SOURCE_LANGUAGE || "auto",
@@ -294,16 +317,19 @@ async function main() {
   await fs.mkdir(path.dirname(statePath), { recursive: true });
   for (;;) {
     try {
-      let state = { created: 0 };
+      let state = { created: 0, failures: {} };
       try { state = { ...state, ...JSON.parse(await fs.readFile(statePath, "utf8")) }; } catch {}
-      const allowance = Math.max(0, maxNewOutputs - Number(state.created || 0));
-      const results = allowance > 0 ? await scanOnce(root, { ...options, maxNewOutputs: allowance }) : [];
+      const remainingTotal = Math.max(0, maxTotalOutputs - Number(state.created || 0));
+      const allowance = Math.min(maxNewOutputsPerScan, remainingTotal);
+      const skipPaths = new Set(Object.entries(state.failures || {}).filter(([, failure]) => Number(failure?.attempts || 0) >= maxFailureAttempts).map(([sourcePath]) => sourcePath));
+      const results = allowance > 0 ? await scanOnce(root, { ...options, maxNewOutputs: allowance, skipPaths }) : [];
       state.created = Number(state.created || 0) + results.filter((result) => result.status === "created").length;
       state.updatedAt = new Date().toISOString();
+      state.failures = updateFailureLedger(state.failures, results, maxFailureAttempts, state.updatedAt);
       const temporaryState = `${statePath}.tmp-${process.pid}`;
       await fs.writeFile(temporaryState, JSON.stringify(state, null, 2) + "\n", "utf8");
       await fs.rename(temporaryState, statePath);
-      console.log(JSON.stringify({ time: state.updatedAt, revision: process.env.GSS_BUILD_REV || "image", scanned: root, pilotLimit: maxNewOutputs, created: state.created, results }));
+      console.log(JSON.stringify({ time: state.updatedAt, revision: process.env.GSS_BUILD_REV || "image", scanned: root, totalLimit: Number.isFinite(maxTotalOutputs) ? maxTotalOutputs : null, perScanLimit: maxNewOutputsPerScan, created: state.created, deferredFailures: Object.values(state.failures).filter((failure) => Number(failure?.attempts || 0) >= maxFailureAttempts).length, results }));
     } catch (error) {
       console.error(JSON.stringify({ time: new Date().toISOString(), error: error.message }));
     }

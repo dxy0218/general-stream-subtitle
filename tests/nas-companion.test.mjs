@@ -3,7 +3,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { decodeSubtitle, looksChinese, outputPathFor, parseSrt, pickEmbeddedTextStream, processSrt, renderSrt, requestGoogle, scanOnce } from "../nas-companion/index.mjs";
+import { decodeSubtitle, looksChinese, outputPathFor, parseSrt, pickEmbeddedTextStream, processSrt, renderSrt, requestGoogle, scanOnce, updateFailureLedger } from "../nas-companion/index.mjs";
 
 const SAMPLE = "1\n00:00:01,000 --> 00:00:02,000\nNAS upload smoke OK\n";
 
@@ -172,4 +172,16 @@ test("scan pauses after the translation failure limit", async () => {
   });
   assert.equal(attempts, 2);
   assert.deepEqual(results.at(-1), { status: "paused", reason: "translation-failure-limit", failures: 2 });
+});
+
+test("persistent failure ledger defers a repeatedly failing source without blocking the queue forever", () => {
+  const sourcePath = "/media/Broken.srt";
+  let ledger = {};
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    ledger = updateFailureLedger(ledger, [{ status: "failed", sourcePath, error: "bad subtitle" }], 3, `attempt-${attempt}`);
+  }
+  assert.deepEqual(ledger[sourcePath], { attempts: 3, lastError: "bad subtitle", lastAttemptAt: "attempt-3" });
+  const skipPaths = new Set(Object.entries(ledger).filter(([, failure]) => failure.attempts >= 3).map(([path]) => path));
+  assert.equal(skipPaths.has(sourcePath), true);
+  assert.deepEqual(updateFailureLedger(ledger, [{ status: "created", sourcePath }], 3), {});
 });
