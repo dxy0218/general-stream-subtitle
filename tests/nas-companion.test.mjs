@@ -3,7 +3,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { outputPathFor, parseSrt, processSrt, renderSrt, scanOnce } from "../nas-companion/index.mjs";
+import { looksChinese, outputPathFor, parseSrt, processSrt, renderSrt, scanOnce } from "../nas-companion/index.mjs";
 
 const SAMPLE = "1\n00:00:01,000 --> 00:00:02,000\nNAS upload smoke OK\n";
 
@@ -16,6 +16,11 @@ test("parses and renders bilingual SRT without changing timing", () => {
 test("chooses the Infuse-compatible output filename", () => {
   assert.equal(outputPathFor("Show S01E01.en.srt"), "Show S01E01.zh-CN.srt");
   assert.equal(outputPathFor("Show S01E01.srt"), "Show S01E01.zh-CN.srt");
+});
+
+test("detects an existing Chinese subtitle body", () => {
+  assert.equal(looksChinese("这是一段已经存在的中文字幕内容。"), true);
+  assert.equal(looksChinese("This is an existing English subtitle body."), false);
 });
 
 test("writes atomically and never overwrites generated output", async () => {
@@ -37,4 +42,12 @@ test("scan is restricted to its supplied root", async () => {
   const results = await scanOnce(root, { translator: async () => ["示例"] });
   assert.equal(results.length, 1);
   assert.equal(results[0].status, "created");
+});
+
+test("pilot limit caps newly created outputs", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "gss-nas-limit-"));
+  await writeFile(path.join(root, "One.srt"), SAMPLE);
+  await writeFile(path.join(root, "Two.srt"), SAMPLE);
+  const results = await scanOnce(root, { translator: async () => ["示例"], maxNewOutputs: 1 });
+  assert.equal(results.filter((result) => result.status === "created").length, 1);
 });

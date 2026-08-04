@@ -9,7 +9,11 @@ services:
       SOURCE_LANGUAGE: en
       TARGET_LANGUAGE: zh-CN
       SUBTITLE_MODE: bilingual
+      MAX_NEW_OUTPUTS: "10"
+      MAX_EMBEDDED_PROBES_PER_SCAN: "20"
+      STATE_PATH: /config/state.json
     volumes:
-      - /volume1/homes/dxy1234/Videos/_FilmSubtitles_NAS_Test:/media
+      - /volume1/homes/dxy1234/Videos:/media
+      - /volume1/docker/gss-nas-test/config:/config
     cpus: 1.0
     mem_limit: 1g
