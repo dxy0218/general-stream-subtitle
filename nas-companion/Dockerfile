@@ -21,6 +21,7 @@ RUN apk add --no-cache curl ffmpeg libgomp libstdc++ \
   && mkdir -p /models \
   && curl --fail --location --retry 3 --output /models/ggml-base.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
 COPY --from=whisper-builder /src/whisper.cpp/build/bin/whisper-cli /usr/local/bin/whisper-cli
+RUN whisper-cli --help >/dev/null 2>&1
 WORKDIR /app
 COPY index.mjs /app/index.mjs
 EXPOSE 8787

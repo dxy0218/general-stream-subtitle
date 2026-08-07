@@ -1,6 +1,7 @@
 services:
   subtitle-companion:
     build: .
+    image: gss-nas-companion:whisper-v1
     container_name: gss-nas-test
     restart: unless-stopped
     env_file:

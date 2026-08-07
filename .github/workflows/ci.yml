@@ -11,3 +11,7 @@ jobs:
         with:
           node-version: 20
       - run: npm run check
+      - name: Build NAS speech-recognition image
+        run: docker build --tag gss-nas-companion:ci nas-companion
+      - name: Verify Whisper runtime
+        run: docker run --rm --entrypoint whisper-cli gss-nas-companion:ci --help
