@@ -347,7 +347,9 @@ export async function transcribeVideo(videoPath, options = {}) {
 export async function scanOnce(root, options = {}) {
   const files = await walk(root);
   const results = [];
-  const videos = files.filter((file) => VIDEO_EXTENSIONS.has(path.extname(file).toLowerCase()));
+  const videos = files
+    .filter((file) => VIDEO_EXTENSIONS.has(path.extname(file).toLowerCase()))
+    .sort((left, right) => Number(!matchesAsrInclude(left, options.asrIncludePattern)) - Number(!matchesAsrInclude(right, options.asrIncludePattern)) || left.localeCompare(right));
   const videoStems = new Set(videos.map((file) => file.slice(0, -path.extname(file).length)));
   const sources = files
     .filter((file) => SOURCE_SUFFIX.test(file) && !GENERATED_SUFFIX.test(file))

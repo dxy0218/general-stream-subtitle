@@ -212,6 +212,30 @@ test("speech recognition never runs outside the include pattern or when a text t
   }), []);
 });
 
+test("ASR allowlist is prioritized ahead of the normal embedded-probe limit", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "gss-nas-asr-priority-"));
+  for (let index = 0; index < 25; index++) await writeFile(path.join(root, `A${String(index).padStart(2, "0")}.mkv`), "fake video");
+  const target = path.join(root, "Gunsmoke S07E01.mp4");
+  await writeFile(target, "fake video");
+  const probed = [];
+  const results = await scanOnce(root, {
+    asrEnabled: true,
+    asrIncludePattern: /Gunsmoke S07E01[.]mp4$/,
+    maxAsrPerScan: 1,
+    maxEmbeddedProbes: 1,
+    embeddedExtractor: async (videoPath) => { probed.push(videoPath); return { extractedPath: null, hasTextStream: false }; },
+    transcriber: async (videoPath) => {
+      const transcript = `${videoPath}.test-transcript.srt`;
+      await writeFile(transcript, SAMPLE);
+      return transcript;
+    },
+    translator: async () => ["荒野镖客语音识别成功"]
+  });
+  assert.deepEqual(probed, [target]);
+  assert.equal(results[0].status, "created");
+  assert.match(await readFile(path.join(root, "Gunsmoke S07E01.zh-CN.srt"), "utf8"), /荒野镖客语音识别成功/);
+});
+
 test("Chinese speech recognition output is written directly without redundant translation", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "gss-nas-asr-chinese-"));
   const video = path.join(root, "Chinese Show S01E01.mkv");
