@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { timingSafeEqual } from "node:crypto";
 import { promises as fs } from "node:fs";
 import { createServer } from "node:http";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -140,7 +141,7 @@ export function dashboardHtml() {
 <section class="card"><div class="muted">最近完成</div><ol class="recent" id="recent"></ol></section>
 <p class="muted">这里只显示文件名和计数，不读取或展示字幕正文。内嵌字幕仍在逐批发现，因此本进度条表示当前已发现的文字字幕任务。</p></main>
 <script>
-const $=id=>document.getElementById(id);const phaseNames={starting:'启动中',scanning:'扫描中',inventory:'盘点中',translating:'翻译中',sleeping:'等待下一轮',error:'发生错误'};
+const $=id=>document.getElementById(id);const phaseNames={starting:'启动中',scanning:'扫描中',inventory:'盘点中',transcribing:'语音识别中',translating:'翻译中',sleeping:'等待下一轮',error:'发生错误'};
 function time(value){if(!value)return '—';return new Date(value).toLocaleString('zh-CN',{hour12:false})}
 async function refresh(){try{const s=await fetch('./api/status',{cache:'no-store'}).then(r=>r.json());const i=s.inventory||{};const done=Number(i.completed||0)+Number(s.batchCreated||0);const total=Number(i.total||0);const pct=total?Math.min(100,done/total*100):0;$('phase').textContent=phaseNames[s.phase]||s.phase||'运行中';$('done').textContent=done;$('total').textContent=total;$('fill').style.width=pct+'%';$('percent').textContent=total?pct.toFixed(1)+'% · 待处理 '+Math.max(0,total-done):'正在盘点任务';$('created').textContent=s.created??0;$('batch').textContent=(s.batchCreated??0)+' / '+(s.perScanLimit??10);$('chinese').textContent=i.skippedChinese??0;$('failures').textContent=(s.failureCount??0)+' / '+(s.deferredFailures??0);$('current').textContent=s.currentPath||'等待下一轮';$('updated').textContent='最近更新：'+time(s.updatedAt);$('next').textContent=s.nextScanAt?'下一轮预计：'+time(s.nextScanAt):'';const list=$('recent');list.replaceChildren(...(s.recent||[]).map(value=>{const li=document.createElement('li');li.textContent=value;return li;}));}catch{$('phase').textContent='连接失败'}}refresh();setInterval(refresh,3000);
 </script></body></html>`;
@@ -187,9 +188,9 @@ export function startStatusServer(getStatus, options = {}) {
   return server;
 }
 
-function execFileAsync(command, args) {
+function execFileAsync(command, args, options = {}) {
   return new Promise((resolve, reject) => {
-    execFile(command, args, { maxBuffer: 8 * 1024 * 1024 }, (error, stdout, stderr) => {
+    execFile(command, args, { maxBuffer: 8 * 1024 * 1024, ...options }, (error, stdout, stderr) => {
       if (error) reject(new Error(`${command} failed: ${stderr || error.message}`));
       else resolve(stdout);
     });
@@ -285,11 +286,18 @@ export async function translateGoogle(texts, source = "auto", target = "zh-CN") 
 export async function processSrt(sourcePath, options = {}) {
   const outputPath = options.outputPath || outputPathFor(sourcePath);
   if (outputPath === sourcePath || await exists(outputPath)) return { status: "skipped", sourcePath, outputPath };
-  const cues = parseSrt(decodeSubtitle(await fs.readFile(sourcePath)));
+  const decoded = decodeSubtitle(await fs.readFile(sourcePath));
+  const cues = parseSrt(decoded);
   if (!cues.some((cue) => Number.isInteger(cue.timeIndex) && cue.timeIndex >= 0 && cue.text)) {
     return { status: "skipped", reason: "unsupported-or-invalid-srt", sourcePath, outputPath };
   }
-  if (looksChinese(cues.map((cue) => cue.text).join("\n"))) return { status: "skipped", reason: "source-looks-chinese", sourcePath, outputPath };
+  if (looksChinese(cues.map((cue) => cue.text).join("\n"))) {
+    if (!options.allowChineseSource) return { status: "skipped", reason: "source-looks-chinese", sourcePath, outputPath };
+    const temporaryPath = `${outputPath}.gss-tmp-${process.pid}`;
+    await fs.writeFile(temporaryPath, `${decoded.trim()}\n`, { encoding: "utf8", flag: "wx" });
+    await fs.rename(temporaryPath, outputPath);
+    return { status: "created", sourcePath, outputPath, translated: false };
+  }
   const translator = options.translator || translateGoogle;
   const translations = await translator(cues.map((cue) => cue.text), options.sourceLanguage || "auto", options.targetLanguage || "zh-CN");
   const rendered = renderSrt(cues, translations, options.mode || "bilingual");
@@ -303,10 +311,37 @@ async function extractEmbeddedSubtitle(videoPath) {
   const raw = await execFileAsync("ffprobe", ["-v", "error", "-select_streams", "s", "-show_entries", "stream=index,codec_name:stream_tags=language", "-of", "json", videoPath]);
   const streams = JSON.parse(raw).streams || [];
   const stream = pickEmbeddedTextStream(streams);
-  if (!stream) return null;
+  if (!stream) return { extractedPath: null, hasTextStream: streams.some((item) => TEXT_SUBTITLE_CODECS.has(item.codec_name)) };
   const extractedPath = `${videoPath}.gss-extracted-${process.pid}.srt`;
   await execFileAsync("ffmpeg", ["-v", "error", "-y", "-i", videoPath, "-map", `0:${stream.index}`, extractedPath]);
-  return extractedPath;
+  return { extractedPath, hasTextStream: true };
+}
+
+export function matchesAsrInclude(videoPath, pattern) {
+  if (!pattern) return false;
+  pattern.lastIndex = 0;
+  return pattern.test(videoPath);
+}
+
+export async function transcribeVideo(videoPath, options = {}) {
+  const command = options.whisperCommand || process.env.WHISPER_COMMAND || "whisper-cli";
+  const modelPath = options.whisperModelPath || process.env.WHISPER_MODEL_PATH || "/models/ggml-base.bin";
+  const threads = String(Math.max(1, Number(options.whisperThreads || process.env.WHISPER_THREADS || 2)));
+  const temporaryRoot = await fs.mkdtemp(path.join(os.tmpdir(), "gss-asr-"));
+  const audioPath = path.join(temporaryRoot, "audio.wav");
+  const outputBase = path.join(temporaryRoot, "transcript");
+  const outputPath = `${outputBase}.srt`;
+  try {
+    await execFileAsync("ffmpeg", ["-v", "error", "-y", "-i", videoPath, "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", audioPath]);
+    await execFileAsync(command, ["-m", modelPath, "-f", audioPath, "-l", "auto", "-t", threads, "-osrt", "-of", outputBase, "-np"], { timeout: Number(options.asrTimeoutMs || process.env.ASR_TIMEOUT_MS || 12 * 60 * 60 * 1000) });
+    if (!await exists(outputPath)) throw new Error("Whisper did not create an SRT transcript");
+    const body = await fs.readFile(outputPath);
+    const durablePath = `${videoPath}.gss-asr-${process.pid}.srt`;
+    await fs.writeFile(durablePath, body, { flag: "wx" });
+    return durablePath;
+  } finally {
+    await fs.rm(temporaryRoot, { recursive: true, force: true });
+  }
 }
 
 export async function scanOnce(root, options = {}) {
@@ -344,7 +379,9 @@ export async function scanOnce(root, options = {}) {
   }
 
   let embeddedProbes = 0;
+  let asrStarted = 0;
   const maxEmbeddedProbes = Math.max(0, Number(options.maxEmbeddedProbes ?? 20));
+  const maxAsrPerScan = Math.max(0, Number(options.maxAsrPerScan ?? 0));
   for (const videoPath of videos) {
     if (remaining <= 0 || embeddedProbes >= maxEmbeddedProbes) break;
     if (options.skipPaths?.has(videoPath)) continue;
@@ -353,12 +390,25 @@ export async function scanOnce(root, options = {}) {
     const base = videoPath.slice(0, -path.extname(videoPath).length);
     if (sources.some((source) => source.replace(SOURCE_SUFFIX, "") === base)) continue;
     let extractedPath;
+    let transcriptPath;
     try {
       options.onProgress?.({ phase: "scanning", currentPath: videoPath });
       embeddedProbes += 1;
-      extractedPath = await extractEmbeddedSubtitle(videoPath);
+      const embedded = options.embeddedExtractor ? await options.embeddedExtractor(videoPath) : await extractEmbeddedSubtitle(videoPath);
+      extractedPath = typeof embedded === "string" ? embedded : embedded?.extractedPath;
       if (extractedPath) {
         const result = await processSrt(extractedPath, { ...options, outputPath });
+        results.push(result);
+        if (result.status === "created") remaining -= 1;
+        options.onProgress?.({ phase: "translating", currentPath: videoPath, result });
+      } else if (!embedded?.hasTextStream && options.asrEnabled && asrStarted < maxAsrPerScan && matchesAsrInclude(videoPath, options.asrIncludePattern)) {
+        asrStarted += 1;
+        options.onProgress?.({ phase: "transcribing", currentPath: videoPath });
+        const transcriber = options.transcriber || transcribeVideo;
+        transcriptPath = await transcriber(videoPath, options);
+        options.onProgress?.({ phase: "translating", currentPath: videoPath });
+        const translated = await processSrt(transcriptPath, { ...options, outputPath, allowChineseSource: true });
+        const result = { ...translated, sourcePath: videoPath, transcription: true };
         results.push(result);
         if (result.status === "created") remaining -= 1;
         options.onProgress?.({ phase: "translating", currentPath: videoPath, result });
@@ -369,6 +419,7 @@ export async function scanOnce(root, options = {}) {
       if (translationFailures >= maxTranslationFailures) break;
     } finally {
       if (extractedPath) await fs.rm(extractedPath, { force: true });
+      if (transcriptPath) await fs.rm(transcriptPath, { force: true });
     }
   }
   return results;
@@ -400,16 +451,31 @@ async function main() {
   const maxTotalOutputs = configuredTotalLimit > 0 ? configuredTotalLimit : Infinity;
   const maxNewOutputsPerScan = Math.max(1, Number(process.env.MAX_NEW_OUTPUTS_PER_SCAN || 10));
   const maxFailureAttempts = Math.max(1, Number(process.env.MAX_FAILURE_ATTEMPTS || 3));
+  const asrEnabled = String(process.env.ASR_ENABLED || "false").toLowerCase() === "true";
+  const asrIncludeValue = String(process.env.ASR_INCLUDE_PATTERN || "").trim();
+  if (asrEnabled && !asrIncludeValue) throw new Error("ASR_INCLUDE_PATTERN is required when ASR_ENABLED=true");
+  let asrIncludePattern = null;
+  if (asrIncludeValue) {
+    try { asrIncludePattern = new RegExp(asrIncludeValue, "i"); }
+    catch (error) { throw new Error(`Invalid ASR_INCLUDE_PATTERN: ${error.message}`); }
+  }
   const options = {
     mode: process.env.SUBTITLE_MODE === "translated" ? "translated" : "bilingual",
     sourceLanguage: process.env.SOURCE_LANGUAGE || "auto",
     targetLanguage: process.env.TARGET_LANGUAGE || "zh-CN",
     requireVideoMatch: true,
     maxTranslationFailures: Math.max(1, Number(process.env.MAX_TRANSLATION_FAILURES_PER_SCAN || 3)),
-    maxEmbeddedProbes: Math.max(0, Number(process.env.MAX_EMBEDDED_PROBES_PER_SCAN || 20))
+    maxEmbeddedProbes: Math.max(0, Number(process.env.MAX_EMBEDDED_PROBES_PER_SCAN || 20)),
+    asrEnabled,
+    asrIncludePattern,
+    maxAsrPerScan: Math.max(0, Number(process.env.MAX_ASR_PER_SCAN || 1)),
+    whisperCommand: process.env.WHISPER_COMMAND || "whisper-cli",
+    whisperModelPath: process.env.WHISPER_MODEL_PATH || "/models/ggml-base.bin",
+    whisperThreads: Math.max(1, Number(process.env.WHISPER_THREADS || 2))
   };
   const runtime = {
     revision: process.env.GSS_BUILD_REV || "image",
+    asrEnabled,
     phase: "starting",
     startedAt: new Date().toISOString(),
     created: 0,

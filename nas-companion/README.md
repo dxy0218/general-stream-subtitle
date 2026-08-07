@@ -2,6 +2,10 @@
 
 This service scans every 10 minutes, auto-detects non-Chinese SRT languages, translates them to bilingual `*.zh-CN.srt`, and can extract non-Chinese text subtitle tracks from video files with FFmpeg. Image subtitle codecs such as PGS/SUP are skipped. Existing Chinese subtitles and generated output are never overwritten. Translation requests are batched and rate-limited.
 
+When explicitly enabled, videos with no external subtitle and no embedded text subtitle can fall back to local speech recognition with whisper.cpp. The recognized SRT is passed through the existing bilingual translation pipeline and written beside the video as `<video-stem>.zh-CN.srt`. ASR is disabled by default and requires a non-empty `ASR_INCLUDE_PATTERN`, so enabling the feature cannot accidentally queue the full library.
+
+Recommended DS420+ pilot settings are `MAX_ASR_PER_SCAN=1`, `WHISPER_THREADS=2`, the bundled multilingual `base` model, and an include pattern matching one test episode. The source video is never modified, temporary audio/transcripts are removed, and existing output is never overwritten.
+
 For the Synology deployment, copy this directory into a Container Manager project and use `compose.yaml`. The compose file mounts:
 
 `/volume1/homes/dxy1234/Videos`

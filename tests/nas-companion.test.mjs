@@ -3,7 +3,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { buildExternalInventory, dashboardHtml, decodeSubtitle, looksChinese, outputPathFor, parseSrt, pickEmbeddedTextStream, processSrt, renderSrt, requestGoogle, scanOnce, startStatusServer, updateFailureLedger } from "../nas-companion/index.mjs";
+import { buildExternalInventory, dashboardHtml, decodeSubtitle, looksChinese, matchesAsrInclude, outputPathFor, parseSrt, pickEmbeddedTextStream, processSrt, renderSrt, requestGoogle, scanOnce, startStatusServer, updateFailureLedger } from "../nas-companion/index.mjs";
 
 const SAMPLE = "1\n00:00:01,000 --> 00:00:02,000\nNAS upload smoke OK\n";
 
@@ -158,6 +158,79 @@ test("pilot limit caps newly created outputs", async () => {
   await writeFile(path.join(root, "Two.srt"), SAMPLE);
   const results = await scanOnce(root, { translator: async () => ["示例"], maxNewOutputs: 1 });
   assert.equal(results.filter((result) => result.status === "created").length, 1);
+});
+
+test("ASR include pattern only matches an explicitly allowed episode", () => {
+  const pattern = /Show[ .]S01E02/i;
+  assert.equal(matchesAsrInclude("/media/Show S01E02.mkv", pattern), true);
+  assert.equal(matchesAsrInclude("/media/Show S01E03.mkv", pattern), false);
+  assert.equal(matchesAsrInclude("/media/Show S01E02.mkv", null), false);
+});
+
+test("speech recognition fallback creates a bilingual subtitle beside an allowlisted video", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "gss-nas-asr-"));
+  const video = path.join(root, "Show S01E02.mkv");
+  await writeFile(video, "fake video");
+  let transcribed = 0;
+  const results = await scanOnce(root, {
+    asrEnabled: true,
+    asrIncludePattern: /S01E02/,
+    maxAsrPerScan: 1,
+    embeddedExtractor: async () => ({ extractedPath: null, hasTextStream: false }),
+    transcriber: async (videoPath) => {
+      transcribed += 1;
+      const transcript = `${videoPath}.test-transcript.srt`;
+      await writeFile(transcript, SAMPLE);
+      return transcript;
+    },
+    translator: async () => ["语音识别翻译成功"]
+  });
+  assert.equal(transcribed, 1);
+  assert.equal(results[0].status, "created");
+  assert.equal(results[0].sourcePath, video);
+  assert.equal(results[0].transcription, true);
+  assert.match(await readFile(path.join(root, "Show S01E02.zh-CN.srt"), "utf8"), /NAS upload smoke OK\n语音识别翻译成功/);
+});
+
+test("speech recognition never runs outside the include pattern or when a text track exists", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "gss-nas-asr-guard-"));
+  await writeFile(path.join(root, "Show S01E03.mkv"), "fake video");
+  const transcriber = async () => { throw new Error("ASR must not run"); };
+  assert.deepEqual(await scanOnce(root, {
+    asrEnabled: true,
+    asrIncludePattern: /S01E02/,
+    maxAsrPerScan: 1,
+    embeddedExtractor: async () => ({ extractedPath: null, hasTextStream: false }),
+    transcriber
+  }), []);
+  assert.deepEqual(await scanOnce(root, {
+    asrEnabled: true,
+    asrIncludePattern: /S01E03/,
+    maxAsrPerScan: 1,
+    embeddedExtractor: async () => ({ extractedPath: null, hasTextStream: true }),
+    transcriber
+  }), []);
+});
+
+test("Chinese speech recognition output is written directly without redundant translation", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "gss-nas-asr-chinese-"));
+  const video = path.join(root, "Chinese Show S01E01.mkv");
+  await writeFile(video, "fake video");
+  const results = await scanOnce(root, {
+    asrEnabled: true,
+    asrIncludePattern: /Chinese Show/,
+    maxAsrPerScan: 1,
+    embeddedExtractor: async () => ({ extractedPath: null, hasTextStream: false }),
+    transcriber: async (videoPath) => {
+      const transcript = `${videoPath}.test-transcript.srt`;
+      await writeFile(transcript, "1\n00:00:01,000 --> 00:00:02,000\n这是一段由语音识别生成的中文字幕内容。\n");
+      return transcript;
+    },
+    translator: async () => { throw new Error("Chinese ASR must not be translated again"); }
+  });
+  assert.equal(results[0].status, "created");
+  assert.equal(results[0].translated, false);
+  assert.match(await readFile(path.join(root, "Chinese Show S01E01.zh-CN.srt"), "utf8"), /语音识别生成/);
 });
 
 test("builds a safe external subtitle progress inventory", async () => {

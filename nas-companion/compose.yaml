@@ -16,6 +16,12 @@ services:
       MAX_EMBEDDED_PROBES_PER_SCAN: "20"
       MAX_TRANSLATION_FAILURES_PER_SCAN: "3"
       MAX_FAILURE_ATTEMPTS: "3"
+      ASR_ENABLED: "false"
+      ASR_INCLUDE_PATTERN: ""
+      MAX_ASR_PER_SCAN: "1"
+      WHISPER_MODEL_PATH: /models/ggml-base.bin
+      WHISPER_THREADS: "2"
+      ASR_TIMEOUT_MS: "43200000"
       STATE_PATH: /config/state.json
       GSS_BUILD_REV: live-mounted
       STATUS_PORT: "8787"
