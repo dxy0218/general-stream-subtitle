@@ -43,7 +43,9 @@
         summary.outputSubtitles = outputSummary.subtitles;
         summary.outputVirtualSubtitleUris = outputSummary.virtualSubtitleUris;
         summary.outputRenditions = outputSummary.renditions;
-        summary.strategy = platform.id === "max" && config.maxReplaceSource ? "replace-source" : "duplicate";
+        summary.strategy = (platform.id === "max" && config.maxReplaceSource)
+          || (/^(?:paramount|paramount-live)$/.test(platform.id) && config.paramountReplaceSource)
+          ? "replace-source" : "duplicate";
       }
       contentType = "application/vnd.apple.mpegurl; charset=utf-8";
       record(platform, media ? "hls-media" : "hls-master", output !== body, summary, output !== body ? "rewritten" : "unchanged");

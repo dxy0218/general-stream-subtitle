@@ -142,7 +142,7 @@ GSS.M3U8 = (function createM3U8Tools() {
     var attributes = parseAttributes(candidate.line);
     var originalUri = get(attributes, "URI");
     if (!originalUri) return null;
-    // Preserve every identity and selection attribute exactly as Max supplied
+    // Preserve every identity and selection attribute exactly as the platform supplied
     // it. Only the media URI changes, so the app continues to trust this as its
     // original en-US CC rendition while the Gateway returns bilingual VTT.
     set(attributes, "URI", GSS.Url.virtual(config.virtualOrigin, "/playlist", {
@@ -221,7 +221,10 @@ GSS.M3U8 = (function createM3U8Tools() {
     }
 
     var output = [], injected = 0;
-    var replaceSource = !!(config.maxReplaceSource && platform && platform.id === "max");
+    var replaceSource = !!(platform && (
+      (config.maxReplaceSource && platform.id === "max")
+      || (config.paramountReplaceSource && /^(?:paramount|paramount-live)$/.test(platform.id))
+    ));
     lines.forEach(function (line, index) {
       if (index !== selected.index) { output.push(line); return; }
       if (replaceSource) {

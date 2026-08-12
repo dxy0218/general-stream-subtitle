@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.6.16
+
+- Use source-rendition replacement for Paramount+ in the Shadowrocket iPad/tvOS preset.
+- Preserve Paramount+'s trusted subtitle identity while routing its existing URI through bilingual translation, avoiding synthetic-track selections that the app never requests.
+
 ## 0.6.15
 
 - Publish immutable, versioned runtime bundle paths so Shadowrocket cannot retain an older Gateway or manifest script when it ignores URL query parameters.

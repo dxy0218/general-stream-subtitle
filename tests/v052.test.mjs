@@ -120,7 +120,7 @@ test("Shadowrocket preset overrides stale settings and injects all requested HLS
       $persistentStore: persistent,
       $done(p) { result = p; }
     });
-    if (platform === "max") {
+    if (/^(?:max|paramount|paramount-live)$/.test(platform)) {
       assert.doesNotMatch(result.body, /NAME="Translate-zh"/);
       assert.equal((result.body.match(/TYPE=SUBTITLES/g) || []).length, 1);
       assert.match(decodeURIComponent(result.body), /strategy=replace-source/);
@@ -156,6 +156,27 @@ test("Shadowrocket Hy-MT2 preset keeps the private endpoint and normal fallback 
   assert.equal(config.batchChars, 1600);
   assert.equal(config.hyMt2Preset, true);
   assert.equal(config.maxReplaceSource, true);
+  assert.equal(config.paramountReplaceSource, true);
+});
+
+test("Shadowrocket Paramount preset preserves the official rendition and virtualizes only its URI", () => {
+  const body = fs.readFileSync(path.join(root, "tests/fixtures/paramount-live-master.m3u8"), "utf8");
+  const { persistent } = storeRuntime(); let result;
+  run("dist/manifest.js", {
+    $request: { url: "https://vod.pplus.paramount.tech/title/master.m3u8", headers: {} },
+    $response: { body, headers: { "Content-Type": "application/vnd.apple.mpegurl" } },
+    $argument: "presetMode=true&safePlayback=true&platformParamount=true&paramountReplaceSource=true",
+    $persistentStore: persistent,
+    $done(p) { result = p; }
+  });
+  assert.equal((result.body.match(/TYPE=SUBTITLES/g) || []).length, 1);
+  assert.match(result.body, /NAME="English CC"/);
+  assert.match(result.body, /LANGUAGE="en"/);
+  assert.doesNotMatch(result.body, /NAME="Translate-zh"/);
+  const decoded = decodeURIComponent(result.body);
+  assert.match(decoded, /https:\/\/example\.com\/playlist\?/);
+  assert.match(decoded, /platform=paramount/);
+  assert.match(decoded, /strategy=replace-source/);
 });
 
 test("safe playback preset bypasses non-HLS responses and a disabled Discovery adapter", () => {
