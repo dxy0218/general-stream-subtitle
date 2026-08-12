@@ -97,17 +97,19 @@ test("Discovery hls-only mode injects HLS but bypasses playback JSON", () => {
   assert.deepEqual(Object.keys(jsonResult), []);
 });
 
-test("Shadowrocket preset overrides stale settings and injects all five requested HLS platforms", () => {
+test("Shadowrocket preset overrides stale settings and injects all requested HLS platforms", () => {
   const hls = fs.readFileSync(path.join(root, "tests/fixtures/master.m3u8"), "utf8");
   const { store, persistent } = storeRuntime();
   store.set("GSS_SETTINGS_V4", JSON.stringify({ platforms: "none", source: "ja", target: "en", discoveryMode: "full" }));
-  const argument = "presetMode=true&safePlayback=true&platformDiscovery=true&discoveryHlsOnly=true&platformMax=true&platformPluto=true&platformPrime=true&platformHulu=true&platformYoutube=false";
+  const argument = "presetMode=true&safePlayback=true&platformDiscovery=true&discoveryHlsOnly=true&platformMax=true&platformPluto=true&platformPrime=true&platformHulu=true&platformParamount=true&platformYoutube=false";
   const cases = [
     ["discovery", "https://content-ause1-ur-discovery1.uplynk.com/asset/master.m3u8"],
     ["max", "https://cf.prod.media.max.com/title/master.m3u8"],
     ["pluto", "https://service-stitcher.clusters.pluto.tv/v1/stitch/embed/hls/channel/demo/master.m3u8"],
     ["prime", "https://a.hls.pv-cdn.net/title/master.m3u8"],
-    ["hulu", "https://vodmanifest.hulustream.com/title/master.m3u8"]
+    ["hulu", "https://vodmanifest.hulustream.com/title/master.m3u8"],
+    ["paramount", "https://vod.cbsaavideo.com/library/show/master.m3u8"],
+    ["paramount-live", "https://live.cbsaavideo.com/channel/cbs-news/master.m3u8"]
   ];
   for (const [platform, url] of cases) {
     let result;
@@ -266,7 +268,10 @@ test("generated modules use dedicated media-only rules for the requested platfor
     assert.match(content, /service-stitcher\.clusters\.pluto\.tv/);
   }
   const shadow = fs.readFileSync(path.join(root, "modules", "GeneralStreamSubtitle.module"), "utf8");
-  assert.doesNotMatch(shadow, /GSS Paramount/);
+  assert.match(shadow, /GSS Paramount HLS/);
+  assert.match(shadow, /\*\.cbsaavideo\.com/);
+  assert.doesNotMatch(shadow, /\*\.paramountplus\.com/);
+  assert.doesNotMatch(shadow, /\*\.cbs\.com/);
   assert.doesNotMatch(shadow, /GSS Manifest =/);
 });
 
@@ -276,7 +281,7 @@ test("Shadowrocket exposes only native boolean switches", () => {
   const descriptionLine = content.split("\n").find((line) => line.startsWith("#!arguments-desc="));
   const entries = argumentLine.slice("#!arguments=".length).split(",").map((entry) => entry.trim().split(":"));
   const names = entries.map(([name]) => name);
-  assert.deepEqual(names, ["DISCOVERY", "DISCOVERY_HLS_ONLY", "MAX", "PLUTO", "PRIME", "HULU", "HY_MT2", "PURE_TRACK", "CACHE", "LOGS", "DEBUG"]);
+  assert.deepEqual(names, ["DISCOVERY", "DISCOVERY_HLS_ONLY", "MAX", "PLUTO", "PRIME", "HULU", "PARAMOUNT", "HY_MT2", "PURE_TRACK", "CACHE", "LOGS", "DEBUG"]);
   for (const [name, value] of entries) {
     assert.match(value, /^(?:true|false)$/);
     assert.match(descriptionLine, new RegExp(`${name}: `));
@@ -294,6 +299,19 @@ test("Shadowrocket safety module never intercepts YouTube TV", () => {
   assert.doesNotMatch(content, /GSS YouTube Caption/);
   assert.doesNotMatch(hostnameLine, /youtube/i);
   assert.doesNotMatch(content, /platformYoutube|youtubeUseAsr|youtubeLive/);
+});
+
+test("Shadowrocket Paramount rule only intercepts known HLS media hosts", () => {
+  const content = fs.readFileSync(path.join(root, "modules", "GeneralStreamSubtitle.module"), "utf8");
+  const line = content.split("\n").find((item) => item.startsWith("GSS Paramount HLS ="));
+  const pattern = new RegExp(line.slice(line.indexOf("pattern=") + 8, line.indexOf(", requires-body=")));
+  assert.equal(pattern.test("https://vod.cbsaavideo.com/library/show/master.m3u8?token=x"), true);
+  assert.equal(pattern.test("https://live.cbsaavideo.com/channel/news/subtitles/en.m3u8"), true);
+  assert.equal(pattern.test("https://media.pplus.paramount.tech/title/playlist.m3u8"), true);
+  assert.equal(pattern.test("https://auth.paramountplus.com/login"), false);
+  assert.equal(pattern.test("https://api.paramountplus.com/graphql"), false);
+  assert.equal(pattern.test("https://www.cbs.com/account/profile"), false);
+  assert.equal(pattern.test("https://vod.cbsaavideo.com/library/show/manifest.mpd"), false);
 });
 
 test("Shadowrocket Gateway GET routes do not require a request body", () => {

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.6.14
+
+- Add an explicit Paramount+ switch and HLS manifest rule to the Shadowrocket Apple TV preset.
+- Enable both Paramount+ VOD and Live platform IDs when the switch is on.
+- Limit default Paramount+ MITM coverage to known media-delivery host families rather than account and application APIs.
+
 ## 0.6.13
 
 - Return an empty successful response for Safari favicon and Apple Touch icon probes on the synthetic management host.

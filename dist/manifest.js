@@ -1,4 +1,4 @@
-// General Stream Subtitle 0.6.13 - manifest
+// General Stream Subtitle 0.6.14 - manifest
 // MIT License - generated file; edit src/ instead.
 (function () {
 "use strict";
@@ -251,7 +251,7 @@ GSS.Language = (function createLanguageTools() {
   };
 })();
 
-GSS.VERSION = "0.6.13";
+GSS.VERSION = "0.6.14";
 GSS.SETTINGS_KEY = "GSS_SETTINGS_V4";
 GSS.PROVIDER_SECRETS_KEY = "GSS_PROVIDER_SECRETS_V1";
 GSS.ADMIN_TOKEN_KEY = "GSS_ADMIN_TOKEN_V1";
@@ -285,6 +285,7 @@ GSS.DEFAULTS = {
   platformPluto: true,
   platformPrime: true,
   platformHulu: true,
+  platformParamount: true,
   platformYoutube: true,
   formats: "all",
   genericMode: false,
@@ -329,7 +330,7 @@ GSS.allowedSettings = {
   providerPrompt: "string", source: "string", sourcePriority: "string", target: "string", trackName: "string",
   injectTranslated: "boolean", translatedTrackName: "string", bilingualOrder: "string", platforms: "string", discoveryMode: "string",
   safePlayback: "boolean", maxReplaceSource: "boolean", presetMode: "boolean", hyMt2Preset: "boolean", platformDiscovery: "boolean", discoveryHlsOnly: "boolean",
-  platformMax: "boolean", platformPluto: "boolean", platformPrime: "boolean", platformHulu: "boolean", platformYoutube: "boolean",
+  platformMax: "boolean", platformPluto: "boolean", platformPrime: "boolean", platformHulu: "boolean", platformParamount: "boolean", platformYoutube: "boolean",
   formats: "string", genericMode: "boolean", customDomains: "string", youtubeStrategy: "string",
   youtubeUseAsr: "boolean", youtubeLive: "boolean", youtubePreferManual: "boolean", logEnabled: "boolean", debug: "boolean", cacheEnabled: "boolean",
   cacheTTL: "number", cacheLimit: "number", batchChars: "number", batchItems: "number", translationConcurrency: "number"
@@ -404,6 +405,7 @@ GSS.getConfig = function getConfig() {
     if (args.platformPluto) presetPlatforms.push("pluto");
     if (args.platformPrime) presetPlatforms.push("prime");
     if (args.platformHulu) presetPlatforms.push("hulu");
+    if (args.platformParamount) { presetPlatforms.push("paramount"); presetPlatforms.push("paramount-live"); }
     if (args.platformYoutube) { presetPlatforms.push("youtube"); presetPlatforms.push("youtube-tv"); }
     config.enabled = true;
     config.source = "auto";
