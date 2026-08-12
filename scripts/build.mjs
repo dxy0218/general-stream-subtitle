@@ -10,8 +10,11 @@ function read(relative) { return fs.readFileSync(path.join(root, relative), "utf
 function bundle(name, files) {
   const banner = `// General Stream Subtitle ${pkg.version} - ${name}\n// MIT License - generated file; edit src/ instead.\n`;
   const content = `${banner}(function () {\n"use strict";\nvar GSS = {};\n${files.map(read).join("\n\n")}\n})();\n`;
-  fs.mkdirSync(path.join(root, "dist"), { recursive: true });
-  fs.writeFileSync(path.join(root, "dist", `${name}.js`), content);
+  const distRoot = path.join(root, "dist");
+  const versionedDistRoot = path.join(distRoot, `v${pkg.version}`);
+  fs.mkdirSync(versionedDistRoot, { recursive: true });
+  fs.writeFileSync(path.join(distRoot, `${name}.js`), content);
+  fs.writeFileSync(path.join(versionedDistRoot, `${name}.js`), content);
 }
 
 const base = [
@@ -78,13 +81,14 @@ const forceHttpHosts = [
   "*.hls.pv-cdn.net", "*.hls.row.aiv-cdn.net", "*avodhlss3ww-a.akamaihd.net", "cf-timedtext.aux.pv-cdn.net",
   "d1v5ir2lpwr8os.cloudfront.net", "d22qjgkvxw22r6.cloudfront.net", "d25xi40x97liuc.cloudfront.net", "d27xxe7juh1us6.cloudfront.net", "dmqdd6hw24ucf.cloudfront.net"
 ].join(", ");
-// Proxy clients cache each remote script independently from the module file.
-// Change the runtime URL on every release so all bundles refresh together.
-const runtimeVersion = encodeURIComponent(pkg.version);
-const manifestUrl = `${rawBase}/dist/manifest.js?v=${runtimeVersion}`;
-const gatewayUrl = `${rawBase}/dist/gateway.js?v=${runtimeVersion}`;
-const youtubeUrl = `${rawBase}/dist/youtube.js?v=${runtimeVersion}`;
-const youtubeCaptionUrl = `${rawBase}/dist/youtube-caption.js?v=${runtimeVersion}`;
+// Some proxy clients cache scripts by pathname and ignore query parameters.
+// Publish immutable runtime paths on every release so an updated module cannot
+// accidentally keep a gateway or manifest bundle from an older version.
+const versionedDistUrl = `${rawBase}/dist/v${encodeURIComponent(pkg.version)}`;
+const manifestUrl = `${versionedDistUrl}/manifest.js`;
+const gatewayUrl = `${versionedDistUrl}/gateway.js`;
+const youtubeUrl = `${versionedDistUrl}/youtube.js`;
+const youtubeCaptionUrl = `${versionedDistUrl}/youtube-caption.js`;
 const defaultArgs = "source=auto&target=zh-CN&trackName=Translate-zh&provider=google-free&platforms=all&discoveryMode=full&safePlayback=false&formats=all&genericMode=false&youtubeStrategy=direct&youtubeUseAsr=true&youtubeLive=true&youtubePreferManual=true&injectTranslated=false&bilingualOrder=translation-first&cacheEnabled=true&logEnabled=true&debug=false";
 const surgeArgs = "source=%SOURCE%&target=%TARGET%&trackName=%TRACK_NAME%&provider=%PROVIDER%&platforms=%PLATFORMS%&discoveryMode=%DISCOVERY_MODE%&formats=%FORMATS%&genericMode=%GENERIC%&youtubeStrategy=%YT_STRATEGY%&youtubeUseAsr=%YT_ASR%&youtubeLive=%YT_LIVE%&youtubePreferManual=%YT_MANUAL%&injectTranslated=%PURE_TRACK%&bilingualOrder=%ORDER%&cacheEnabled=%CACHE%&logEnabled=%LOGS%&debug=%DEBUG%";
 const shadowArgs = "presetMode=true&safePlayback=true&maxReplaceSource=true&hyMt2Preset={{{HY_MT2}}}&platformDiscovery={{{DISCOVERY}}}&discoveryHlsOnly={{{DISCOVERY_HLS_ONLY}}}&platformMax={{{MAX}}}&platformPluto={{{PLUTO}}}&platformPrime={{{PRIME}}}&platformHulu={{{HULU}}}&platformParamount={{{PARAMOUNT}}}&injectTranslated={{{PURE_TRACK}}}&cacheEnabled={{{CACHE}}}&logEnabled={{{LOGS}}}&debug={{{DEBUG}}}";
@@ -172,9 +176,14 @@ hostname = %APPEND% ${shadowMitmHosts}
 
 const surgeModule = surge.replace("PLATFORMS=all&FORMATS=all", "PLATFORMS=all&DISCOVERY_MODE=full&FORMATS=all");
 const shadowrocketModule = shadowrocket;
+const versionedShadowrocketModule = shadowrocket.replace(
+  "#!name=General Stream Subtitle",
+  `#!name=General Stream Subtitle v${pkg.version}`
+);
 
 fs.mkdirSync(path.join(root, "modules"), { recursive: true });
 fs.writeFileSync(path.join(root, "modules", "GeneralStreamSubtitle.sgmodule"), surgeModule);
 fs.writeFileSync(path.join(root, "modules", "GeneralStreamSubtitle.plugin"), loon);
 fs.writeFileSync(path.join(root, "modules", "GeneralStreamSubtitle.module"), shadowrocketModule);
+fs.writeFileSync(path.join(root, "modules", `GeneralStreamSubtitle-v${pkg.version}.module`), versionedShadowrocketModule);
 console.log(`Built General Stream Subtitle ${pkg.version}`);

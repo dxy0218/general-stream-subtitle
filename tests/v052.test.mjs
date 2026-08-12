@@ -373,14 +373,27 @@ test("generated rules match media manifests and bypass account, session, GraphQL
   assert.equal(pluto.test("https://api.pluto.tv/v2/session"), false);
 });
 
-test("generated module runtime URLs are cache-busted by package version", () => {
+test("generated module runtime URLs use immutable package-version paths", () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
   for (const filename of ["GeneralStreamSubtitle.module", "GeneralStreamSubtitle.plugin", "GeneralStreamSubtitle.sgmodule"]) {
     const content = fs.readFileSync(path.join(root, "modules", filename), "utf8");
     for (const bundle of ["manifest", "gateway", "youtube", "youtube-caption"]) {
-      if (!content.includes(`/dist/${bundle}.js`)) continue;
+      if (!content.includes(`/${bundle}.js`)) continue;
       const escapedVersion = pkg.version.replace(/\./g, "\\.");
-      assert.match(content, new RegExp(`/dist/${bundle}\\.js\\?v=${escapedVersion}`));
+      assert.match(content, new RegExp(`/dist/v${escapedVersion}/${bundle}\\.js`));
     }
+  }
+});
+
+test("build publishes a uniquely named Shadowrocket module and versioned bundles", () => {
+  const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+  const moduleName = `GeneralStreamSubtitle-v${pkg.version}.module`;
+  const content = fs.readFileSync(path.join(root, "modules", moduleName), "utf8");
+  assert.match(content, new RegExp(`^#!name=General Stream Subtitle v${pkg.version.replace(/\./g, "\\.")}`, "m"));
+  assert.match(content, /PARAMOUNT:true/);
+  for (const bundle of ["manifest", "gateway", "youtube", "youtube-caption"]) {
+    const bundlePath = path.join(root, "dist", `v${pkg.version}`, `${bundle}.js`);
+    assert.equal(fs.existsSync(bundlePath), true);
+    assert.match(fs.readFileSync(bundlePath, "utf8"), new RegExp(`General Stream Subtitle ${pkg.version.replace(/\./g, "\\.")}`));
   }
 });

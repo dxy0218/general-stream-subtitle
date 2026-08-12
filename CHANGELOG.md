@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.6.15
+
+- Publish immutable, versioned runtime bundle paths so Shadowrocket cannot retain an older Gateway or manifest script when it ignores URL query parameters.
+- Publish a uniquely named Shadowrocket import file for clean reinstall and duplicate-module diagnosis.
+
 ## 0.6.14
 
 - Add an explicit Paramount+ switch and HLS manifest rule to the Shadowrocket Apple TV preset.
