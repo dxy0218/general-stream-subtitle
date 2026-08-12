@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.6.13
+
+- Return an empty successful response for Safari favicon and Apple Touch icon probes on the synthetic management host.
+- Keep automatic browser icon requests out of subtitle Gateway errors and diagnostic summaries.
+
 ## 0.6.12
 
 - Make the Shadowrocket module safe for Apple TV by removing YouTube and YouTube TV response scripts and MITM hostnames.

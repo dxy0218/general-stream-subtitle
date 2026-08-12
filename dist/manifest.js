@@ -1,4 +1,4 @@
-// General Stream Subtitle 0.6.12 - manifest
+// General Stream Subtitle 0.6.13 - manifest
 // MIT License - generated file; edit src/ instead.
 (function () {
 "use strict";
@@ -251,7 +251,7 @@ GSS.Language = (function createLanguageTools() {
   };
 })();
 
-GSS.VERSION = "0.6.12";
+GSS.VERSION = "0.6.13";
 GSS.SETTINGS_KEY = "GSS_SETTINGS_V4";
 GSS.PROVIDER_SECRETS_KEY = "GSS_PROVIDER_SECRETS_V1";
 GSS.ADMIN_TOKEN_KEY = "GSS_ADMIN_TOKEN_V1";

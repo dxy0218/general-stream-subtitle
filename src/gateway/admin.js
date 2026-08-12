@@ -108,6 +108,13 @@ GSS.Admin = (function createAdmin() {
   }
   function handle(url, config, logger) {
     var path = GSS.Url.path(url), query = params(url), token = GSS.getAdminToken();
+    // Safari probes these paths automatically when the synthetic management
+    // page opens. They are not subtitle gateway requests and must not inflate
+    // the error summary with a misleading "missing origin URL" failure.
+    if (path === "/favicon.ico" || path === "/apple-touch-icon.png" || path === "/apple-touch-icon-precomposed.png") {
+      GSS.Runtime.doneResponse(204, { "Cache-Control": "public, max-age=86400" }, "");
+      return true;
+    }
     if (path === "/health") { var diagnosticSummary = GSS.Diagnostics ? GSS.Diagnostics.summary() : { total: 0 }; json(200, { ok: true, version: GSS.VERSION, runtime: GSS.Runtime.name, providers: GSS.Providers.list(), formats: GSS.Formats.list(), platforms: GSS.Platforms.list(), config: publicConfig(config), diagnosticsCount: diagnosticSummary.total, diagnostics: diagnosticSummary }); return true; }
     if (path === "/logs") { logsPage(token, ""); return true; }
     if (path === "/logs.json" || path === "/diagnostics") { json(200, logsPayload()); return true; }

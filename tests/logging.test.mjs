@@ -126,6 +126,21 @@ test("gss.local logs page renders summaries, escaped details and copy/export con
   assert.equal(store.get("GSS_ADMIN_TOKEN_V1"), "admin-token");
 });
 
+test("management page icon probes return 204 without recording Gateway errors", () => {
+  const { store, persistent } = persistentStore();
+  for (const pathName of ["/favicon.ico", "/apple-touch-icon.png", "/apple-touch-icon-precomposed.png"]) {
+    let result;
+    run("dist/gateway.js", {
+      $request: { url: "https://example.com" + pathName, method: "GET", headers: {} },
+      $persistentStore: persistent,
+      $done(payload) { result = payload; }
+    });
+    assert.equal(result.response.status, 204);
+    assert.equal(result.response.body, "");
+  }
+  assert.equal(store.has("GSS_DIAGNOSTICS_V1"), false);
+});
+
 test("gateway records upstream, translation and fallback stages without signed URL queries", () => {
   const vtt = fs.readFileSync(path.join(root, "tests/fixtures/sample.vtt"), "utf8");
   const { store, persistent } = persistentStore();
