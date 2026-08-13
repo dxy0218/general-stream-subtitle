@@ -61,7 +61,7 @@ test("detects modern Discovery+ CDNs before the shared Max CDN", () => {
   assert.equal(GSS.Platforms.detect("https://cf.prod.media.h264.io/title/master.m3u8").id,"max");
 });
 
-test("gives injected Apple subtitle tracks a unique stable rendition id", () => {
+test("duplicate strategy gives injected Apple subtitle tracks a unique stable rendition id", () => {
   const { GSS } = load(core);
   const body = [
     "#EXTM3U",
@@ -69,11 +69,29 @@ test("gives injected Apple subtitle tracks a unique stable rendition id", () => 
     '#EXT-X-STREAM-INF:BANDWIDTH=1000000,SUBTITLES="subs"',
     "video/main.m3u8"
   ].join("\n");
-  const output = GSS.M3U8.injectTracks(body,"https://play.itunes.apple.com/WebObjects/MZPlay.woa/hls/workout/master.m3u8",GSS.DEFAULTS,{info(){}},{id:"apple-fitness"});
+  const config = { ...GSS.DEFAULTS, trackStrategy:"duplicate" };
+  const output = GSS.M3U8.injectTracks(body,"https://play.itunes.apple.com/WebObjects/MZPlay.woa/hls/workout/master.m3u8",config,{info(){}},{id:"apple-fitness"});
   const ids = [...output.matchAll(/STABLE-RENDITION-ID="([^"]+)"/g)].map((match) => match[1]);
   assert.equal(ids.length,2);
   assert.notEqual(ids[0],ids[1]);
   assert.match(ids[1],/^gss-[0-9a-f]+$/);
+});
+
+test("default non-Max strategy preserves the official HLS rendition identity", () => {
+  const { GSS } = load(core);
+  const body = [
+    "#EXTM3U",
+    '#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="English",LANGUAGE="en",DEFAULT=YES,AUTOSELECT=YES,STABLE-RENDITION-ID="official.en",URI="subs/en.m3u8"',
+    '#EXT-X-STREAM-INF:BANDWIDTH=1000000,SUBTITLES="subs"',
+    "video/main.m3u8"
+  ].join("\n");
+  const output = GSS.M3U8.injectTracks(body,"https://a.cdn.peacocktv.com/title/master.m3u8",GSS.DEFAULTS,{info(){}},{id:"peacock"});
+  assert.equal((output.match(/TYPE=SUBTITLES/g)||[]).length,1);
+  assert.match(output,/NAME="English"/);
+  assert.match(output,/LANGUAGE="en"/);
+  assert.match(output,/STABLE-RENDITION-ID="official\.en"/);
+  assert.doesNotMatch(output,/Translate-zh/);
+  assert.match(decodeURIComponent(output),/strategy=replace-source/);
 });
 
 test("keeps an explicit Apple-compatible Max rendition stable across CDN refreshes", () => {

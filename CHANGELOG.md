@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.7.0
+
+- Keep the proven HBO Max adapter unchanged while re-auditing the remaining platform paths.
+- Use identity-preserving source-URL replacement by default for supported non-Max HLS, simple DASH and playback-JSON subtitle tracks; the legacy duplicate-track strategy remains selectable.
+- Synchronize Shadowrocket, Surge and Loon defaults and rules, and add an `OTHER` Shadowrocket switch for the remaining supported HLS platforms.
+- Expand current media-only coverage for Paramount+, Hulu, Peacock, Pluto TV, BBC iPlayer, Viki and Plex without intercepting their account or DRM APIs.
+- Inspect all known Pluto HLS playlist names, add conservative Prime Video DASH text-track handling, and record the selected compatibility strategy in diagnostics.
+
 ## 0.6.16
 
 - Use source-rendition replacement for Paramount+ in the Shadowrocket iPad/tvOS preset.

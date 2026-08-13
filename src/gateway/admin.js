@@ -104,6 +104,12 @@ GSS.Admin = (function createAdmin() {
       + '<label class="check"><input type="checkbox" name="debug" value="true"' + checked(config.debug) + '>控制台详细调试输出</label>'
       + '<div class="actions"><button type="submit">保存设置</button><a class="button" href="/reset?token=' + escapeHtml(token) + '">恢复默认</a><a class="button" href="/health">运行状态</a><a class="button" href="/logs">运行日志</a></div></form>'
       + '<p class="muted">保存后请完全退出并重新打开流媒体 App。此页面由代理脚本合成，不是常驻 Web 服务。</p></main></body></html>';
+    html = html.replace('<h2>YouTube / YouTube TV</h2>',
+      '<h2>Subtitle track compatibility</h2><label>HLS / DASH / playback JSON strategy</label>'
+      + '<select name="trackStrategy"><option value="replace-source"' + selected(config.trackStrategy, "replace-source") + '>Keep the official track identity (recommended)</option>'
+      + '<option value="duplicate"' + selected(config.trackStrategy, "duplicate") + '>Add a separate Translate-zh track</option></select>'
+      + '<p class="muted">The recommended mode keeps the platform subtitle name and selection identity, and only routes its media URL through bilingual translation. Max keeps its dedicated compatibility behavior.</p>'
+      + '<h2>YouTube / YouTube TV</h2>');
     GSS.Runtime.doneResponse(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" }, html);
   }
   function handle(url, config, logger) {
@@ -130,6 +136,7 @@ GSS.Admin = (function createAdmin() {
         provider: query.provider, fallbackProviders: query.fallbackProviders, providerEndpoint: query.providerEndpoint,
         providerModel: query.providerModel, providerRegion: query.providerRegion, providerProject: query.providerProject,
         providerLocation: query.providerLocation, providerPrompt: query.providerPrompt, bilingualOrder: query.bilingualOrder,
+        trackStrategy: query.trackStrategy,
         platforms: platformIds.length === GSS.Platforms.list().length ? "all" : (platformIds.join(",") || "none"),
         formats: formatIds.length === GSS.Formats.list().length ? "all" : (formatIds.join(",") || "none"),
         genericMode: query.genericMode === "true", customDomains: query.customDomains,

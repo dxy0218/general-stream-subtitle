@@ -99,9 +99,27 @@ GSS.PlaybackJson = (function createPlaybackJsonAdapter() {
     return cloned;
   }
 
+  function virtualize(item, requestUrl, config, platform) {
+    var urlField = firstString(item, URL_KEYS);
+    if (!urlField) return false;
+    var absolute = GSS.Url.resolve(requestUrl, urlField.value);
+    item[urlField.key] = GSS.Url.virtual(config.virtualOrigin, routeFor(item, absolute), {
+      origin: absolute,
+      mode: "bilingual",
+      source: GSS.Language.googleSource(languageOf(item), config.source),
+      target: config.target,
+      platform: platform ? platform.id : "unknown",
+      strategy: "replace-source",
+      version: GSS.VERSION
+    });
+    return true;
+  }
+
   function hasInjected(array, config) {
     return array.some(function (item) {
-      return item && typeof item === "object" && (item.gssTranslated === true || labelOf(item) === config.trackName);
+      var url = item && typeof item === "object" ? firstString(item, URL_KEYS) : null;
+      return item && typeof item === "object" && (item.gssTranslated === true || labelOf(item) === config.trackName
+        || (url && /(?:gss\.local|example\.com)\/(?:playlist|subtitle)/.test(url.value)));
     });
   }
 
@@ -110,7 +128,8 @@ GSS.PlaybackJson = (function createPlaybackJsonAdapter() {
     try { value = JSON.parse(String(body || "")); }
     catch (_) { return { body: body, changed: false, summary: { reason: "invalid json" } }; }
 
-    var summary = { arraysInspected: 0, textTracks: 0, arraysChanged: 0, injected: 0, selectedLanguage: "", selectedName: "" };
+    var replaceSource = GSS.Platforms.useSourceReplacement(platform, config);
+    var summary = { arraysInspected: 0, textTracks: 0, arraysChanged: 0, injected: 0, selectedLanguage: "", selectedName: "", strategy: replaceSource ? "replace-source" : "duplicate" };
     var maxInjections = 4;
     var maxNodes = 5000;
     var nodesVisited = 0;
@@ -127,9 +146,11 @@ GSS.PlaybackJson = (function createPlaybackJsonAdapter() {
           if (count && !hasInjected(node, config)) {
             var selected = choose(node, key || "", config);
             if (selected) {
-              var cloned = duplicate(selected.item, requestUrl, config, platform);
-              if (cloned) {
-                node.splice(selected.index + 1, 0, cloned);
+              var changed = replaceSource
+                ? virtualize(selected.item, requestUrl, config, platform)
+                : duplicate(selected.item, requestUrl, config, platform);
+              if (changed) {
+                if (!replaceSource) node.splice(selected.index + 1, 0, changed);
                 summary.arraysChanged += 1;
                 summary.injected += 1;
                 summary.selectedLanguage = languageOf(selected.item) || "auto";

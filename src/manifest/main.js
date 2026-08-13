@@ -30,6 +30,7 @@
     var processingMode = "full";
     if (platform.id === "discovery") processingMode = String(config.discoveryMode || "full");
     else if (config.safePlayback && /^(max|pluto|prime|hulu)$/.test(platform.id)) processingMode = "hls-only";
+    else if (config.safePlayback) processingMode = "hls-only";
     if (processingMode === "off") { record(platform, "adapter-off", false, { processingMode: processingMode }, "bypassed"); GSS.Runtime.passThrough(); return; }
     var output = body;
     var contentType = "";
@@ -45,6 +46,7 @@
         summary.outputRenditions = outputSummary.renditions;
         summary.strategy = (platform.id === "max" && config.maxReplaceSource)
           || (/^(?:paramount|paramount-live)$/.test(platform.id) && config.paramountReplaceSource)
+          || GSS.Platforms.useSourceReplacement(platform, config)
           ? "replace-source" : "duplicate";
       }
       contentType = "application/vnd.apple.mpegurl; charset=utf-8";
@@ -55,7 +57,7 @@
     } else if (/<MPD\b/i.test(body)) {
       output = GSS.MPD.injectTrack(body, requestUrl, config, logger, platform);
       contentType = "application/dash+xml; charset=utf-8";
-      record(platform, "dash", output !== body, {});
+      record(platform, "dash", output !== body, { strategy: GSS.Platforms.useSourceReplacement(platform, config) ? "replace-source" : "duplicate" });
     } else if (/^\s*[\[{]/.test(body) && /^(max|discovery|paramount|paramount-live)$/.test(platform.id)) {
       var jsonResult = GSS.PlaybackJson.inject(body, requestUrl, config, logger, platform);
       output = jsonResult.body;

@@ -224,6 +224,7 @@ GSS.M3U8 = (function createM3U8Tools() {
     var replaceSource = !!(platform && (
       (config.maxReplaceSource && platform.id === "max")
       || (config.paramountReplaceSource && /^(?:paramount|paramount-live)$/.test(platform.id))
+      || GSS.Platforms.useSourceReplacement(platform, config)
     ));
     lines.forEach(function (line, index) {
       if (index !== selected.index) { output.push(line); return; }
@@ -231,6 +232,10 @@ GSS.M3U8 = (function createM3U8Tools() {
         var replacement = virtualizeSourceTrack(selected, requestUrl, config, platform);
         output.push(replacement || line);
         if (replacement) injected += 1;
+        if (replacement && config.injectTranslated && platform.id !== "max") {
+          var pureTranslated = duplicateTrack(selected, requestUrl, "translate", config, platform);
+          if (pureTranslated) { output.push(pureTranslated); injected += 1; }
+        }
         return;
       }
       output.push(line);

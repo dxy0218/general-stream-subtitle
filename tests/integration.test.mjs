@@ -24,7 +24,7 @@ test("built HLS manifest exposes Translate-zh on Max", () => {
   assert.equal(result.headers["Content-Length"],undefined);
 });
 
-test("built DASH manifest injects a direct text adaptation track", () => {
+test("built non-Max DASH manifest preserves the direct text adaptation identity", () => {
   const mpd=fs.readFileSync(path.join(root,"tests/fixtures/simple.mpd"),"utf8");
   const store=new Map(); let result;
   run("dist/manifest.js",{
@@ -33,9 +33,11 @@ test("built DASH manifest injects a direct text adaptation track", () => {
     $persistentStore:{read(k){return store.get(k)||null;},write(v,k){store.set(k,v);return true;}},
     $done(p){result=p;}
   });
-  assert.match(result.body,/gss-[0-9a-f]+/);
-  assert.match(result.body,/Translate-zh/);
+  assert.match(result.body,/AdaptationSet id="2"[^>]*lang="en"/);
+  assert.match(result.body,/<Label>English<\/Label>/);
+  assert.doesNotMatch(result.body,/gss-[0-9a-f]+|Translate-zh/);
   assert.match(result.body,/example\.com\/subtitle/);
+  assert.match(result.body,/strategy=replace-source/);
 });
 
 test("gateway translates WebVTT through Google free provider", () => {
@@ -89,7 +91,7 @@ test("admin POST saves provider, formats, platforms, and API key without exposin
   const body = [
     "token=abc","source=auto","sourcePriority=en%2Cja%2Cko","target=zh-TW","trackName=Translate-zh-TW",
     "provider=deepl","providerApiKey=secret-key","providerEndpoint=https%3A%2F%2Fapi-free.deepl.com%2Fv2%2Ftranslate",
-    "bilingualOrder=original-first","enabled=true","cacheEnabled=true","platform_max=true","platform_apple-fitness=true",
+    "bilingualOrder=original-first","trackStrategy=duplicate","enabled=true","cacheEnabled=true","platform_max=true","platform_apple-fitness=true",
     "format_vtt=true","format_srt=true","format_ttml=true"
   ].join("&");
   run("dist/gateway.js",{
@@ -103,6 +105,9 @@ test("admin POST saves provider, formats, platforms, and API key without exposin
   assert.equal(saved.provider,"deepl");
   assert.equal(saved.formats,"vtt,srt,ttml");
   assert.equal(saved.platforms,"apple-fitness,max");
+  assert.equal(saved.trackStrategy,"duplicate");
   assert.equal(secrets.deepl.apiKey,"secret-key");
   assert.doesNotMatch(result.response.body,/secret-key/);
+  assert.match(result.response.body,/name="trackStrategy"/);
+  assert.match(result.response.body,/option value="duplicate" selected/);
 });

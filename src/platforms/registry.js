@@ -16,21 +16,33 @@ GSS.Platforms = (function createPlatformRegistry() {
     },
     { id: "max", name: "Max / HBO Max", maturity: "stable", test: function (host) { return /(^|\.)(max\.com|discomax\.com|h264\.io|hbomaxcdn\.com|api\.hbo\.com)$/.test(host); } },
     { id: "disney", name: "Disney+", maturity: "stable", test: function (host) { return /\.(media|prod)\.(dssott|starott|dssedge)\.com$/.test(host); } },
-    { id: "prime", name: "Prime Video", maturity: "stable", test: function (host) { return /(\.hls\.(pv-cdn|row\.aiv-cdn)\.net$|avodhlss3ww-a\.akamaihd\.net$|^s3\.amazonaws\.com$|^cf-timedtext\.aux\.pv-cdn\.net$|^(d1v5ir2lpwr8os|d22qjgkvxw22r6|d25xi40x97liuc|d27xxe7juh1us6|dmqdd6hw24ucf)\.cloudfront\.net$)/.test(host); } },
+    { id: "prime", name: "Prime Video", maturity: "stable", test: function (host) { return /(\.(?:hls\.(?:pv-cdn|row\.aiv-cdn)|dash\.row\.aiv-cdn)\.net$|avodhlss3ww-a\.akamaihd\.net$|^s3\.amazonaws\.com$|^cf-timedtext\.aux\.pv-cdn\.net$|^(d1v5ir2lpwr8os|d22qjgkvxw22r6|d25xi40x97liuc|d27xxe7juh1us6|dmqdd6hw24ucf)\.cloudfront\.net$)/.test(host); } },
     { id: "hulu", name: "Hulu", maturity: "stable", test: function (host) { return /(^|\.)(hulustream\.com|huluim\.com)$/.test(host) || host === "assetshuluimcom-a.akamaihd.net"; } },
-    { id: "paramount-live", name: "Paramount+ Live TV", maturity: "experimental", test: function (host, path, url) { return /(^|\.)(pplus\.paramount\.tech|paramount\.tech|paramountplus\.com|cbsaavideo\.com|cbsivideo\.com|cbs\.com)$/.test(host) && /(live|linear|channel|station|stream|broadcast)/i.test(String(path || "") + " " + String(url || "")); } },
-    { id: "paramount", name: "Paramount+", maturity: "stable", test: function (host) { return /(^|\.)(pplus\.paramount\.tech|paramount\.tech|paramountplus\.com|cbsaavideo\.com|cbsivideo\.com|cbs\.com)$/.test(host); } },
-    { id: "peacock", name: "Peacock", maturity: "stable", test: function (host) { return /\.cdn\.peacocktv\.com$/.test(host); } },
+    { id: "paramount-live", name: "Paramount+ Live TV", maturity: "experimental", test: function (host, path, url) { return (/^cbsi\.live\.ott\.irdeto\.com$/.test(host) || /(^|\.)(pplus\.paramount\.tech|paramount\.tech|paramountplus\.com|cbsaavideo\.com|cbsivideo\.com|cbs\.com)$/.test(host)) && /(live|linear|channel|station|stream|broadcast)/i.test(String(host || "") + " " + String(path || "") + " " + String(url || "")); } },
+    { id: "paramount", name: "Paramount+", maturity: "stable", test: function (host) { return host === "cbsi.live.ott.irdeto.com" || /(^|\.)(pplus\.paramount\.tech|paramount\.tech|paramountplus\.com|cbsaavideo\.com|cbsivideo\.com|cbs\.com)$/.test(host); } },
+    { id: "peacock", name: "Peacock", maturity: "stable", test: function (host) { return /\.(?:cdn|stream)\.peacocktv\.com$/.test(host); } },
     { id: "fubo", name: "Fubo", maturity: "stable", test: function (host) { return /-vod\.fubo\.tv$/.test(host); } },
     { id: "ted", name: "TED", maturity: "stable", test: function (host) { return host === "hls.ted.com"; } },
-    { id: "bbc", name: "BBC iPlayer", maturity: "experimental", test: function (host) { return /(^|\.)bbci\.co\.uk$/.test(host) || /^vod-.*-live\.akamaized\.net$/.test(host); } },
-    { id: "viki", name: "Rakuten Viki", maturity: "experimental", test: function (host) { return /(^|\.)(viki\.io|viki\.com)$/.test(host); } },
+    { id: "bbc", name: "BBC iPlayer", maturity: "experimental", test: function (host) { return /(^|\.)bbci\.co\.uk$/.test(host) || /^vod-.*(?:\.live\.cf\.md\.bbci\.co\.uk|-live\.akamaized\.net)$/.test(host); } },
+    { id: "viki", name: "Rakuten Viki", maturity: "experimental", test: function (host) { return host === "manifest-viki.viki.io" || /(^|\.)(viki\.io|viki\.com)$/.test(host); } },
     { id: "tubi", name: "Tubi", maturity: "experimental", test: function (host) { return /(^|\.)(tubi\.video|tubitv\.com)$/.test(host); } },
-    { id: "pluto", name: "Pluto TV", maturity: "experimental", test: function (host) { return /(^|\.)pluto\.tv$/.test(host); } },
+    { id: "pluto", name: "Pluto TV", maturity: "experimental", test: function (host) { return /(^|\.)(pluto\.tv|plutotv\.net)$/.test(host); } },
     { id: "crunchyroll", name: "Crunchyroll / VRV", maturity: "experimental", test: function (host) { return /(^|\.)(crunchyroll\.com|vrv\.co)$/.test(host); } },
     { id: "dazn", name: "DAZN", maturity: "experimental", test: function (host) { return /(^|\.)(dazn\.com|dazn-api\.com)$/.test(host); } },
-    { id: "plex", name: "Plex", maturity: "experimental", test: function (host) { return /(^|\.)plex\.tv$/.test(host); } }
+    { id: "plex", name: "Plex", maturity: "experimental", test: function (host) { return /(^|\.)(plex\.tv|plex\.direct)$/.test(host); } }
   ];
+
+  // These platforms expose trusted text-subtitle renditions that can keep
+  // their original identity while only their media URL is routed through GSS.
+  // Max is intentionally excluded because its established compatibility path
+  // remains governed by maxReplaceSource.
+  var identityFirst = {
+    "apple-fitness": true, "apple-tv-plus": true, "apple-tv": true,
+    discovery: true, disney: true, prime: true, hulu: true,
+    "paramount-live": true, paramount: true, peacock: true, fubo: true,
+    ted: true, bbc: true, viki: true, tubi: true, pluto: true,
+    crunchyroll: true, dazn: true, plex: true
+  };
 
   function customDomainMatch(host, config) {
     var domains = String(config.customDomains || "").split(/[,|]/).map(function (item) { return item.trim().toLowerCase().replace(/^\*\./, ""); }).filter(Boolean);
@@ -54,6 +66,11 @@ GSS.Platforms = (function createPlatformRegistry() {
     return enabledIds.indexOf(platform.id) >= 0;
   }
 
+  function useSourceReplacement(platform, config) {
+    if (!platform || platform.id === "max" || !identityFirst[platform.id]) return false;
+    return String(config && config.trackStrategy || "replace-source") !== "duplicate";
+  }
+
   function publicList() {
     var output = list.map(function (item) { return { id: item.id, name: item.name, maturity: item.maturity }; });
     output.push({ id: "custom", name: "Custom Domains", maturity: "custom" });
@@ -61,5 +78,5 @@ GSS.Platforms = (function createPlatformRegistry() {
     return output;
   }
 
-  return { detect: detect, enabled: enabled, list: publicList };
+  return { detect: detect, enabled: enabled, useSourceReplacement: useSourceReplacement, list: publicList };
 })();

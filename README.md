@@ -2,9 +2,9 @@
 
 面向 **Surge、Loon 与 Shadowrocket** 的模块化流媒体字幕翻译中间件。
 
-项目通过 HTTPS MITM 读取播放器清单、播放器响应或文本字幕，在原有字幕菜单中加入一个可见的 **`Translate-zh`** 轨道。只有当用户选择该轨道后，模块才获取原字幕、调用翻译 Provider，并返回双语或纯翻译字幕。
+项目通过 HTTPS MITM 读取播放器清单、播放器响应或文本字幕。默认兼容策略会保留平台原有字幕轨的名称、语言和选择身份，只把字幕 URI 指向翻译网关；也可以切换为新增 **`Translate-zh`** 轨道。播放器请求该轨道后，模块获取原字幕、调用翻译 Provider，并返回双语或纯翻译字幕。
 
-> 当前版本：**v0.6.16**
+> 当前版本：**v0.7.0**
 > 支持系统：iOS、iPadOS、macOS、tvOS（具体能力取决于代理客户端与流媒体 App）  
 > 开源协议：MIT
 
@@ -28,8 +28,8 @@
 
 ## 主要能力
 
-- 在播放器字幕菜单中注入 `Translate-zh` 双语字幕轨。
-- 只有选中翻译轨后才开始翻译，尽量减少无效 API 调用。
+- 默认保留平台官方字幕轨身份，仅替换字幕 URI；可选新增 `Translate-zh` 双语字幕轨。
+- 只有播放器请求接管后的字幕轨时才开始翻译，尽量减少无效 API 调用。
 - 支持自动选择源字幕，也可以指定 `en`、`ja`、`ko`、`fr` 等语言代码。
 - 默认优先人工字幕，再考虑 SDH、CC 和自动生成字幕。
 - 支持 HLS、部分 DASH，以及多种文本字幕格式。
@@ -47,7 +47,7 @@
 流媒体 master.m3u8 / manifest.mpd
   └─ manifest.js 识别平台和字幕轨
        └─ 选择最合适的源字幕
-            └─ 注入 Translate-zh
+            └─ 默认保留原轨身份并替换 URI（可选新增 Translate-zh）
                  └─ URI 指向脚本合成的虚拟字幕网关
                       └─ gateway.js 获取原字幕
                            └─ 解析字幕 → 翻译 → 返回双语字幕
@@ -106,7 +106,7 @@ https://raw.githubusercontent.com/dxy0218/general-stream-subtitle/main/modules/G
 6. 保持默认的 `source=auto`、`target=zh-CN` 和 `provider=google-free`，先进行基础测试。
 7. 完全退出目标流媒体 App，然后重新打开。
 8. 播放本身带有字幕的内容。
-9. 在字幕菜单中选择 `Translate-zh`。
+9. 默认策略下选择平台原有的英文/源语言字幕轨；若在管理页切换为“新增字幕轨”，则选择 `Translate-zh`。
 
 在 iPhone 或 iPad 上，安装证书后通常还需要前往：
 
@@ -149,7 +149,7 @@ Shadowrocket 模块不会加入 `*.youtube.com` 或 `youtubei.googleapis.com`，
 | Apple TV+ | `apple-tv-plus` | HLS + WebVTT |
 | Apple Fitness+ | `apple-fitness` | HLS workout 清单 + WebVTT |
 | Disney+ | `disney` | HLS + WebVTT |
-| Prime Video | `prime` | 专用 HLS 主清单规则 + 文本字幕；DASH/DRM 原样放行 |
+| Prime Video | `prime` | 专用 HLS + 简单文本 DASH；DRM 与分段二进制字幕原样放行 |
 | Hulu | `hulu` | 点播与直播 HLS 主清单 + WebVTT |
 | Paramount+ | `paramount` | HLS + WebVTT |
 | Peacock | `peacock` | HLS + WebVTT |
@@ -283,7 +283,7 @@ Shadowrocket 的 v0.6.0 安全预设属于例外：模块编辑页中的平台�
 
 Shadowrocket 和 Surge 可以直接编辑常用模块参数。Loon 建议通过 `gss.local` 管理页面配置。
 
-Shadowrocket 原生编辑器不会把字符串候选值渲染成下拉菜单，因此模块只暴露布尔开关。默认预设为：自动识别源语言、翻译为简体中文、`Translate-zh`、`google-free`、HLS 播放保护。Max 是例外：tvOS 会移除运行时新增的第二条 rendition，因此 Shadowrocket 保留原始 `en-US CC` 轨并就地返回双语字幕；在菜单中选择 `en-US CC` 即可。打开 `HY_MT2` 后改用保存在本地管理页中的私有 OpenAI-compatible Endpoint 和 API Key；未配置或请求失败时自动回退到 `google-free`。
+Shadowrocket 原生编辑器不会把字符串候选值渲染成下拉菜单，因此模块只暴露布尔开关。默认预设为：自动识别源语言、翻译为简体中文、`google-free`、HLS 播放保护，并对非 Max 平台优先保留官方字幕轨身份。Max 的现有专用兼容逻辑保持不变：在字幕菜单中选择原有 `en-US CC` 即可。打开 `HY_MT2` 后改用保存在本地管理页中的私有 OpenAI-compatible Endpoint 和 API Key；未配置或请求失败时自动回退到 `google-free`。
 
 | 模块参数 | 默认值 | 说明 |
 |---|---|---|
@@ -293,6 +293,8 @@ Shadowrocket 原生编辑器不会把字符串候选值渲染成下拉菜单，�
 | `PLUTO` | `true` | Pluto TV HLS 中文字幕 |
 | `PRIME` | `true` | Amazon Prime Video HLS 中文字幕 |
 | `HULU` | `true` | Hulu 点播/直播 HLS 中文字幕 |
+| `PARAMOUNT` | `true` | Paramount+ 点播/直播 HLS 中文字幕 |
+| `OTHER` | `true` | 其余已支持的 HLS 媒体平台；不包含 YouTube 和 Apple 共用媒体主机 |
 | `HY_MT2` | `false` | 使用私有 Hy-MT2 服务；需先在管理页保存 Endpoint 和 API Key |
 | `PURE_TRACK` | `false` | 是否额外显示纯翻译字幕轨 |
 | `CACHE` | `true` | 是否启用翻译缓存 |
@@ -329,6 +331,7 @@ Surge 继续提供 `SOURCE`、`TARGET`、`PROVIDER`、`PLATFORMS`、`DISCOVERY_M
 - `injectTranslated`：是否额外创建纯翻译轨。
 - `translatedTrackName`：纯翻译字幕轨名称。
 - `bilingualOrder`：译文在前或原文在前。
+- `trackStrategy`：`replace-source` 保留官方字幕轨身份（推荐），`duplicate` 新增 `Translate-zh`。
 - `formats`：启用的字幕格式。
 
 #### 平台设置
@@ -436,6 +439,13 @@ cdn.example.net
 ```
 
 ## 版本更新记录
+
+### v0.7.0 — 非 Max 平台统一兼容链路
+
+- HBO Max 已验证实现保持不变；其余平台统一审计识别域名、客户端规则、主清单、字幕播放列表、字幕正文与翻译网关。
+- 非 Max 的受支持 HLS、简单文本 DASH 和播放 JSON 默认保留官方字幕轨身份，只替换其字幕 URI，避免播放器丢弃新增轨。
+- Shadowrocket、Surge、Loon 使用同一默认策略；Shadowrocket 新增 `OTHER` 开关并继续排除会触发 tvOS 证书校验的 YouTube 与 Apple 共用媒体主机。
+- 扩充 Paramount+、Hulu、Peacock、Pluto TV、BBC iPlayer、Viki 与 Plex 的媒体域名覆盖，同时继续绕过账户、DRM 与视频分片接口。
 
 ### v0.6.12 — Shadowrocket Apple TV 安全兼容
 
@@ -606,8 +616,9 @@ https://example.com/
 - 关闭并重新打开代理软件。
 - 尝试实验性入口 `http://127.0.0.1:6170/gss/`。
 
-#### 字幕菜单没有 `Translate-zh`
+#### 字幕菜单没有 `Translate-zh` 或翻译字幕
 
+- v0.7.0 默认不会新增 `Translate-zh`；请先选择平台原有的英文/源语言字幕轨。
 - 确认 CA 证书已安装并完全信任。
 - 确认 MITM / HTTPS 解密已开启。
 - 完全退出目标 App 后重新打开。

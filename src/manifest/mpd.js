@@ -53,6 +53,24 @@ GSS.MPD = (function createMpdTools() {
     return output;
   }
 
+  function virtualize(block, requestUrl, config, platform) {
+    var startMatch = block.match(/^<AdaptationSet\b[^>]*>/i);
+    var baseMatch = block.match(/<BaseURL\b[^>]*>([\s\S]*?)<\/BaseURL>/i);
+    if (!startMatch || !baseMatch || /<SegmentTemplate\b|<SegmentList\b|<SegmentBase\b/i.test(block)) return null;
+    var language = attr(startMatch[0], "lang") || "auto";
+    var origin = GSS.Url.resolve(requestUrl, GSS.Formats.stripTags(baseMatch[1]));
+    var virtual = GSS.Url.virtual(config.virtualOrigin, "/subtitle", {
+      origin: origin,
+      mode: "bilingual",
+      source: GSS.Language.googleSource(language, config.source),
+      target: config.target,
+      platform: platform ? platform.id : "unknown",
+      strategy: "replace-source",
+      version: GSS.VERSION
+    });
+    return block.replace(baseMatch[0], "<BaseURL>" + GSS.Formats.escapeXml(virtual) + "</BaseURL>");
+  }
+
   function injectTrack(body, requestUrl, config, logger, platform) {
     if (!config.enabled || !/<MPD\b/i.test(String(body || "")) || /(?:gss\.local|example\.com)\/subtitle/.test(String(body))) return body;
     var regex = /<AdaptationSet\b[^>]*>[\s\S]*?<\/AdaptationSet>/gi, match, best = null;
@@ -61,19 +79,28 @@ GSS.MPD = (function createMpdTools() {
       if (!textLike(startTag, match[0])) continue;
       var currentScore = score(startTag, match[0], config);
       if (currentScore < -1000) continue;
-      if (!best || currentScore > best.score) best = { block: match[0], end: regex.lastIndex, score: currentScore };
+      if (!best || currentScore > best.score) best = { block: match[0], start: match.index, end: regex.lastIndex, score: currentScore };
     }
     if (!best) {
       logger.info("DASH manifest inspected", { platform: platform ? platform.id : "unknown", injected: 0, reason: "no matching text adaptation" });
       return body;
     }
-    var clone = duplicate(best.block, requestUrl, config, platform);
-    if (!clone) {
+    var replaceSource = GSS.Platforms.useSourceReplacement(platform, config);
+    var rewritten = replaceSource
+      ? virtualize(best.block, requestUrl, config, platform)
+      : duplicate(best.block, requestUrl, config, platform);
+    if (!rewritten) {
       logger.info("DASH manifest inspected", { platform: platform ? platform.id : "unknown", injected: 0, reason: "segmented or unsupported text adaptation" });
       return body;
     }
-    logger.info("DASH manifest inspected", { platform: platform ? platform.id : "unknown", injected: 1, trackName: config.trackName });
-    return body.slice(0, best.end) + clone + body.slice(best.end);
+    logger.info("DASH manifest inspected", {
+      platform: platform ? platform.id : "unknown",
+      injected: 1,
+      trackName: config.trackName,
+      strategy: replaceSource ? "replace-source" : "duplicate"
+    });
+    if (replaceSource) return body.slice(0, best.start) + rewritten + body.slice(best.end);
+    return body.slice(0, best.end) + rewritten + body.slice(best.end);
   }
 
   return { injectTrack: injectTrack };

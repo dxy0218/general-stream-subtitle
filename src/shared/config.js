@@ -1,4 +1,4 @@
-GSS.VERSION = "0.6.16";
+GSS.VERSION = "0.7.0";
 GSS.SETTINGS_KEY = "GSS_SETTINGS_V4";
 GSS.PROVIDER_SECRETS_KEY = "GSS_PROVIDER_SECRETS_V1";
 GSS.ADMIN_TOKEN_KEY = "GSS_ADMIN_TOKEN_V1";
@@ -23,6 +23,7 @@ GSS.DEFAULTS = {
   platforms: "all",
   discoveryMode: "full",
   safePlayback: false,
+  trackStrategy: "replace-source",
   maxReplaceSource: false,
   paramountReplaceSource: false,
   presetMode: false,
@@ -34,6 +35,7 @@ GSS.DEFAULTS = {
   platformPrime: true,
   platformHulu: true,
   platformParamount: true,
+  platformOther: true,
   platformYoutube: true,
   formats: "all",
   genericMode: false,
@@ -77,8 +79,8 @@ GSS.allowedSettings = {
   providerModel: "string", providerRegion: "string", providerProject: "string", providerLocation: "string",
   providerPrompt: "string", source: "string", sourcePriority: "string", target: "string", trackName: "string",
   injectTranslated: "boolean", translatedTrackName: "string", bilingualOrder: "string", platforms: "string", discoveryMode: "string",
-  safePlayback: "boolean", maxReplaceSource: "boolean", paramountReplaceSource: "boolean", presetMode: "boolean", hyMt2Preset: "boolean", platformDiscovery: "boolean", discoveryHlsOnly: "boolean",
-  platformMax: "boolean", platformPluto: "boolean", platformPrime: "boolean", platformHulu: "boolean", platformParamount: "boolean", platformYoutube: "boolean",
+  safePlayback: "boolean", trackStrategy: "string", maxReplaceSource: "boolean", paramountReplaceSource: "boolean", presetMode: "boolean", hyMt2Preset: "boolean", platformDiscovery: "boolean", discoveryHlsOnly: "boolean",
+  platformMax: "boolean", platformPluto: "boolean", platformPrime: "boolean", platformHulu: "boolean", platformParamount: "boolean", platformOther: "boolean", platformYoutube: "boolean",
   formats: "string", genericMode: "boolean", customDomains: "string", youtubeStrategy: "string",
   youtubeUseAsr: "boolean", youtubeLive: "boolean", youtubePreferManual: "boolean", logEnabled: "boolean", debug: "boolean", cacheEnabled: "boolean",
   cacheTTL: "number", cacheLimit: "number", batchChars: "number", batchItems: "number", translationConcurrency: "number"
@@ -99,6 +101,7 @@ GSS.normalizeSettings = function normalizeSettings(input) {
     if (output.discoveryMode !== "off" && output.discoveryMode !== "hls-only") output.discoveryMode = "full";
   }
   if (output.youtubeStrategy && output.youtubeStrategy !== "virtual") output.youtubeStrategy = "direct";
+  if (output.trackStrategy && output.trackStrategy !== "duplicate") output.trackStrategy = "replace-source";
   if (output.source) output.source = GSS.Language ? GSS.Language.normalize(output.source) : String(output.source).toLowerCase();
   if (output.translationConcurrency !== undefined) output.translationConcurrency = Math.max(1, Math.min(4, Math.floor(output.translationConcurrency)));
   return output;
@@ -154,6 +157,9 @@ GSS.getConfig = function getConfig() {
     if (args.platformPrime) presetPlatforms.push("prime");
     if (args.platformHulu) presetPlatforms.push("hulu");
     if (args.platformParamount) { presetPlatforms.push("paramount"); presetPlatforms.push("paramount-live"); }
+    if (args.platformOther) {
+      presetPlatforms.push("disney", "peacock", "fubo", "ted", "bbc", "viki", "tubi", "crunchyroll", "dazn", "plex");
+    }
     if (args.platformYoutube) { presetPlatforms.push("youtube"); presetPlatforms.push("youtube-tv"); }
     config.enabled = true;
     config.source = "auto";
@@ -187,6 +193,10 @@ GSS.getConfig = function getConfig() {
     config.logEnabled = args.logEnabled !== false;
     config.debug = !!args.debug;
     config.safePlayback = true;
+    // Most Apple media players are more reliable when the platform's trusted
+    // subtitle rendition keeps its identity and only its URI is virtualized.
+    // Max remains controlled by its existing dedicated compatibility switch.
+    config.trackStrategy = "replace-source";
     // Max/tvOS removes synthetic subtitle renditions after selection. Keep the
     // trusted source rendition and route its URI through bilingual translation.
     config.maxReplaceSource = args.maxReplaceSource !== false;

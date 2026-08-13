@@ -47,7 +47,7 @@ test("Max playback JSON injects a virtual Translate-zh text track", () => {
   assert.equal(result.headers.Digest, undefined);
 });
 
-test("Discovery+ playback JSON injects a virtual text track on current CDN hosts", () => {
+test("Discovery+ playback JSON preserves the official text-track identity on current CDN hosts", () => {
   const body = fs.readFileSync(path.join(root, "tests/fixtures/max-playback.json"), "utf8");
   const { persistent } = storeRuntime(); let result;
   run("dist/manifest.js", {
@@ -57,9 +57,28 @@ test("Discovery+ playback JSON injects a virtual text track on current CDN hosts
     $done(p) { result = p; }
   });
   const parsed = JSON.parse(result.body);
-  assert.equal(parsed.playback.textTracks.length, 2);
-  assert.match(parsed.playback.textTracks[1].url, /example\.com\/subtitle/);
-  assert.match(decodeURIComponent(parsed.playback.textTracks[1].url), /platform=discovery/);
+  assert.equal(parsed.playback.textTracks.length, 1);
+  assert.equal(parsed.playback.textTracks[0].label, "English CC");
+  assert.equal(parsed.playback.textTracks[0].language, "en");
+  assert.match(parsed.playback.textTracks[0].url, /example\.com\/subtitle/);
+  assert.match(decodeURIComponent(parsed.playback.textTracks[0].url), /platform=discovery/);
+  assert.match(decodeURIComponent(parsed.playback.textTracks[0].url), /strategy=replace-source/);
+});
+
+test("Paramount+ playback JSON preserves the official text-track identity", () => {
+  const body = fs.readFileSync(path.join(root, "tests/fixtures/max-playback.json"), "utf8");
+  const { persistent } = storeRuntime(); let result;
+  run("dist/manifest.js", {
+    $request: { url: "https://api.paramountplus.com/playback/session?id=demo", headers: {} },
+    $response: { body, headers: { "Content-Type": "application/json" } },
+    $persistentStore: persistent,
+    $done(p) { result = p; }
+  });
+  const parsed = JSON.parse(result.body);
+  assert.equal(parsed.playback.textTracks.length, 1);
+  assert.equal(parsed.playback.textTracks[0].label, "English CC");
+  assert.match(decodeURIComponent(parsed.playback.textTracks[0].url), /platform=paramount/);
+  assert.match(decodeURIComponent(parsed.playback.textTracks[0].url), /strategy=replace-source/);
 });
 
 test("Discovery compatibility mode overrides stored settings and can fully pass through", () => {
@@ -120,11 +139,9 @@ test("Shadowrocket preset overrides stale settings and injects all requested HLS
       $persistentStore: persistent,
       $done(p) { result = p; }
     });
-    if (/^(?:max|paramount|paramount-live)$/.test(platform)) {
-      assert.doesNotMatch(result.body, /NAME="Translate-zh"/);
-      assert.equal((result.body.match(/TYPE=SUBTITLES/g) || []).length, 1);
-      assert.match(decodeURIComponent(result.body), /strategy=replace-source/);
-    } else assert.match(result.body, /NAME="Translate-zh"/);
+    assert.doesNotMatch(result.body, /NAME="Translate-zh"/);
+    assert.equal((result.body.match(/TYPE=SUBTITLES/g) || []).length, 1);
+    assert.match(decodeURIComponent(result.body), /strategy=replace-source/);
     assert.match(decodeURIComponent(result.body), new RegExp(`platform=${platform}`));
   }
 });
@@ -157,6 +174,7 @@ test("Shadowrocket Hy-MT2 preset keeps the private endpoint and normal fallback 
   assert.equal(config.hyMt2Preset, true);
   assert.equal(config.maxReplaceSource, true);
   assert.equal(config.paramountReplaceSource, true);
+  assert.equal(config.trackStrategy, "replace-source");
 });
 
 test("Shadowrocket Paramount preset preserves the official rendition and virtualizes only its URI", () => {
@@ -206,7 +224,7 @@ test("safe playback preset bypasses non-HLS responses and a disabled Discovery a
   }
 });
 
-test("Apple manifest rewrite preserves DRM and video routes while refreshing entity metadata", () => {
+test("Apple manifest rewrite preserves DRM, video routes and the official subtitle identity", () => {
   const body = [
     "#EXTM3U",
     '#EXT-X-SESSION-KEY:METHOD=SAMPLE-AES,URI="skd://license.example/key",KEYFORMAT="com.apple.streamingkeydelivery"',
@@ -223,12 +241,15 @@ test("Apple manifest rewrite preserves DRM and video routes while refreshing ent
   });
   assert.match(result.body, /skd:\/\/license\.example\/key/);
   assert.match(result.body, /video\/main\.m3u8\?token=video-signed/);
-  assert.match(result.body, /NAME="Translate-zh"/);
+  assert.match(result.body, /NAME="English"/);
+  assert.match(result.body, /STABLE-RENDITION-ID="apple\.en"/);
+  assert.doesNotMatch(result.body, /NAME="Translate-zh"/);
+  assert.match(decodeURIComponent(result.body), /strategy=replace-source/);
   assert.equal(result.headers.ETag, undefined);
   assert.equal(result.headers["Content-MD5"], undefined);
 });
 
-test("Paramount+ Live TV master injects Translate-zh", () => {
+test("Paramount+ Live TV master preserves the official subtitle rendition", () => {
   const body = fs.readFileSync(path.join(root, "tests/fixtures/paramount-live-master.m3u8"), "utf8");
   const { persistent } = storeRuntime(); let result;
   run("dist/manifest.js", {
@@ -237,7 +258,10 @@ test("Paramount+ Live TV master injects Translate-zh", () => {
     $persistentStore: persistent,
     $done(p) { result = p; }
   });
-  assert.match(result.body, /NAME="Translate-zh"/);
+  assert.match(result.body, /NAME="English CC"/);
+  assert.doesNotMatch(result.body, /NAME="Translate-zh"/);
+  assert.equal((result.body.match(/TYPE=SUBTITLES/g) || []).length, 1);
+  assert.match(decodeURIComponent(result.body), /strategy=replace-source/);
   assert.match(decodeURIComponent(result.body), /platform=paramount-live/);
 });
 
@@ -263,7 +287,7 @@ test("generated modules use dedicated media-only rules for the requested platfor
   const files = ["GeneralStreamSubtitle.module", "GeneralStreamSubtitle.plugin", "GeneralStreamSubtitle.sgmodule"];
   for (const file of files) {
     const content = fs.readFileSync(path.join(root, "modules", file), "utf8");
-    assert.match(content, /GSS Pluto Master/);
+    assert.match(content, /GSS Pluto HLS/);
     assert.match(content, /GSS Prime Video HLS/);
     assert.match(content, /GSS Hulu HLS/);
     assert.match(content, /GSS Max Discovery Media/);
@@ -287,13 +311,19 @@ test("generated modules use dedicated media-only rules for the requested platfor
     assert.equal(hostnameHosts.includes("livemanifest-f.hulustream.com"), true);
     assert.equal(hostnameHosts.includes("live-sc.hulustream.com"), true);
     assert.match(content, /service-stitcher\.clusters\.pluto\.tv/);
+    assert.match(content, /(?:trackStrategy=replace-source|TRACK_STRATEGY=replace-source)/);
   }
   const shadow = fs.readFileSync(path.join(root, "modules", "GeneralStreamSubtitle.module"), "utf8");
   assert.match(shadow, /GSS Paramount HLS/);
+  assert.match(shadow, /GSS Other Media Manifest/);
   assert.match(shadow, /\*\.cbsaavideo\.com/);
+  assert.match(shadow, /cbsi\.live\.ott\.irdeto\.com/);
+  assert.match(shadow, /\*\.stream\.peacocktv\.com/);
+  assert.match(shadow, /manifest-viki\.viki\.io/);
+  assert.match(shadow, /\*\.plex\.direct/);
   assert.doesNotMatch(shadow, /\*\.paramountplus\.com/);
   assert.doesNotMatch(shadow, /\*\.cbs\.com/);
-  assert.doesNotMatch(shadow, /GSS Manifest =/);
+  assert.doesNotMatch(shadow, /GSS YouTube Player|GSS YouTube Caption/);
 });
 
 test("Shadowrocket exposes only native boolean switches", () => {
@@ -302,7 +332,7 @@ test("Shadowrocket exposes only native boolean switches", () => {
   const descriptionLine = content.split("\n").find((line) => line.startsWith("#!arguments-desc="));
   const entries = argumentLine.slice("#!arguments=".length).split(",").map((entry) => entry.trim().split(":"));
   const names = entries.map(([name]) => name);
-  assert.deepEqual(names, ["DISCOVERY", "DISCOVERY_HLS_ONLY", "MAX", "PLUTO", "PRIME", "HULU", "PARAMOUNT", "HY_MT2", "PURE_TRACK", "CACHE", "LOGS", "DEBUG"]);
+  assert.deepEqual(names, ["DISCOVERY", "DISCOVERY_HLS_ONLY", "MAX", "PLUTO", "PRIME", "HULU", "PARAMOUNT", "OTHER", "HY_MT2", "PURE_TRACK", "CACHE", "LOGS", "DEBUG"]);
   for (const [name, value] of entries) {
     assert.match(value, /^(?:true|false)$/);
     assert.match(descriptionLine, new RegExp(`${name}: `));
@@ -329,6 +359,9 @@ test("Shadowrocket Paramount rule only intercepts known HLS media hosts", () => 
   assert.equal(pattern.test("https://vod.cbsaavideo.com/library/show/master.m3u8?token=x"), true);
   assert.equal(pattern.test("https://live.cbsaavideo.com/channel/news/subtitles/en.m3u8"), true);
   assert.equal(pattern.test("https://media.pplus.paramount.tech/title/playlist.m3u8"), true);
+  assert.equal(pattern.test("https://news-pplus.cbs.com/live/master.m3u8"), true);
+  assert.equal(pattern.test("https://cc.cbs.com/closedcaption/show/en.m3u8"), true);
+  assert.equal(pattern.test("https://cbsi.live.ott.irdeto.com/channel/subtitles/en.m3u8"), true);
   assert.equal(pattern.test("https://auth.paramountplus.com/login"), false);
   assert.equal(pattern.test("https://api.paramountplus.com/graphql"), false);
   assert.equal(pattern.test("https://www.cbs.com/account/profile"), false);
@@ -360,12 +393,14 @@ test("generated rules match media manifests and bypass account, session, GraphQL
   const generalLine = content.split("\n").find((line) => line.includes("tag=GSS Manifest,"));
   const warnerLine = content.split("\n").find((line) => line.includes("tag=GSS Max Discovery Media,"));
   const primeLine = content.split("\n").find((line) => line.includes("tag=GSS Prime Video HLS,"));
+  const primeDashLine = content.split("\n").find((line) => line.includes("tag=GSS Prime Video DASH,"));
   const huluLine = content.split("\n").find((line) => line.includes("tag=GSS Hulu HLS,"));
-  const plutoLine = content.split("\n").find((line) => line.includes("tag=GSS Pluto Master,"));
+  const plutoLine = content.split("\n").find((line) => line.includes("tag=GSS Pluto HLS,"));
   const patternOf = (line) => new RegExp(line.slice("http-response ".length, line.indexOf(" script-path=")));
   const general = new RegExp(generalLine.slice("http-response ".length, generalLine.indexOf(" script-path=")));
   const warner = patternOf(warnerLine);
   const prime = patternOf(primeLine);
+  const primeDash = patternOf(primeDashLine);
   const hulu = patternOf(huluLine);
   const pluto = patternOf(plutoLine);
   const maxUrl = "https://api.discomax.com/playback/session";
@@ -388,9 +423,14 @@ test("generated rules match media manifests and bypass account, session, GraphQL
   assert.equal(warner.test(discoveryApiUrl), false);
   assert.equal(prime.test("https://a.hls.pv-cdn.net/title/master.m3u8?token=x"), true);
   assert.equal(prime.test("https://atv-ps.amazon.com/cdp/catalog/GetPlaybackResources"), false);
+  assert.equal(primeDash.test("https://a.dash.row.aiv-cdn.net/title/manifest.mpd?token=x"), true);
+  assert.equal(primeDash.test("https://a.dash.row.aiv-cdn.net/title/video.m4s"), false);
   assert.equal(hulu.test("https://livemanifest-f.hulustream.com/live/master.m3u8"), true);
+  assert.equal(hulu.test("https://assets.huluim.com/captions/master.m3u8"), true);
   assert.equal(hulu.test("https://auth.hulu.com/login"), false);
   assert.equal(pluto.test("https://service-stitcher.clusters.pluto.tv/v1/stitch/embed/hls/channel/demo/master.m3u8"), true);
+  assert.equal(pluto.test("https://service-stitcher.clusters.pluto.tv/v1/stitch/embed/hls/channel/demo/subtitles/en.m3u8"), true);
+  assert.equal(pluto.test("https://cdn.plutotv.net/channel/demo/playlist.m3u8"), true);
   assert.equal(pluto.test("https://api.pluto.tv/v2/session"), false);
 });
 
@@ -406,12 +446,54 @@ test("generated module runtime URLs use immutable package-version paths", () => 
   }
 });
 
+test("all supported non-Max HLS platforms use the identity-preserving path", () => {
+  const hls = fs.readFileSync(path.join(root, "tests/fixtures/master.m3u8"), "utf8");
+  const cases = [
+    ["apple-fitness", "https://play.itunes.apple.com/WebObjects/MZPlay.woa/hls/workout/master.m3u8"],
+    ["apple-tv-plus", "https://play-edge.itunes.apple.com/WebObjects/MZPlay.woa/hls/subscription/master.m3u8"],
+    ["apple-tv", "https://hls.itunes.apple.com/WebObjects/MZPlay.woa/hls/library/master.m3u8"],
+    ["discovery", "https://content-ause1-ur-discovery1.uplynk.com/asset/master.m3u8"],
+    ["disney", "https://prod-us-west-2.media.dssott.com/ps01/disney/title/master.m3u8"],
+    ["prime", "https://a.hls.pv-cdn.net/title/master.m3u8"],
+    ["hulu", "https://vodmanifest.hulustream.com/title/master.m3u8"],
+    ["paramount", "https://vod.cbsaavideo.com/library/show/master.m3u8"],
+    ["paramount-live", "https://live.cbsaavideo.com/channel/cbs-news/master.m3u8"],
+    ["peacock", "https://east.cdn.peacocktv.com/pub/global/title/master_cmaf.m3u8"],
+    ["fubo", "https://east-vod.fubo.tv/title/manifests/master.m3u8"],
+    ["ted", "https://hls.ted.com/talks/demo/manifest.m3u8"],
+    ["bbc", "https://vod-hls-uk.live.cf.md.bbci.co.uk/title_hls_master.m3u8"],
+    ["viki", "https://manifest-viki.viki.io/show/master.m3u8"],
+    ["tubi", "https://cdn.tubi.video/title/master.m3u8"],
+    ["pluto", "https://service-stitcher.clusters.pluto.tv/v1/stitch/embed/hls/channel/demo/master.m3u8"],
+    ["crunchyroll", "https://media.crunchyroll.com/title/master.m3u8"],
+    ["dazn", "https://live.dazn.com/title/master.m3u8"],
+    ["plex", "https://demo.plex.direct/video/:/transcode/universal/master.m3u8"]
+  ];
+  for (const [platform, url] of cases) {
+    const { persistent } = storeRuntime(); let result;
+    run("dist/manifest.js", {
+      $request: { url, headers: {} },
+      $response: { body: hls, headers: { "Content-Type": "application/vnd.apple.mpegurl" } },
+      $persistentStore: persistent,
+      $done(p) { result = p; }
+    });
+    assert.ok(result.body, `${platform} did not rewrite the master manifest`);
+    assert.equal((result.body.match(/TYPE=SUBTITLES/g) || []).length, 1, `${platform} duplicated the source rendition`);
+    assert.match(result.body, /NAME="English"/, `${platform} changed the source identity`);
+    assert.doesNotMatch(result.body, /NAME="Translate-zh"/, `${platform} created an unstable synthetic rendition`);
+    const decoded = decodeURIComponent(result.body);
+    assert.match(decoded, new RegExp(`platform=${platform}`));
+    assert.match(decoded, /strategy=replace-source/);
+  }
+});
+
 test("build publishes a uniquely named Shadowrocket module and versioned bundles", () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
   const moduleName = `GeneralStreamSubtitle-v${pkg.version}.module`;
   const content = fs.readFileSync(path.join(root, "modules", moduleName), "utf8");
   assert.match(content, new RegExp(`^#!name=General Stream Subtitle v${pkg.version.replace(/\./g, "\\.")}`, "m"));
   assert.match(content, /PARAMOUNT:true/);
+  assert.match(content, /OTHER:true/);
   for (const bundle of ["manifest", "gateway", "youtube", "youtube-caption"]) {
     const bundlePath = path.join(root, "dist", `v${pkg.version}`, `${bundle}.js`);
     assert.equal(fs.existsSync(bundlePath), true);
