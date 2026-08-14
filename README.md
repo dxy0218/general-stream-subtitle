@@ -4,7 +4,7 @@
 
 项目通过 HTTPS MITM 读取播放器清单、播放器响应或文本字幕。默认兼容策略会保留平台原有字幕轨的名称、语言和选择身份，只把字幕 URI 指向翻译网关；也可以切换为新增 **`Translate-zh`** 轨道。播放器请求该轨道后，模块获取原字幕、调用翻译 Provider，并返回双语或纯翻译字幕。
 
-> 当前版本：**v0.7.3**
+> 当前版本：**v0.7.4**
 > 支持系统：iOS、iPadOS、macOS、tvOS（具体能力取决于代理客户端与流媒体 App）  
 > 开源协议：MIT
 
@@ -439,6 +439,12 @@ cdn.example.net
 ```
 
 ## 版本更新记录
+
+### v0.7.4 — Paramount+ tvOS 最终播放响应适配
+
+- 根据 tvOS 15.23.0 实机 PacketTunnel 时间线补充 `apps-api/.../content/playability.json`；该接口在 `dynamicplay` 之后返回最终选中内容的播放描述。
+- Shadowrocket 仍只解密 `www.paramountplus.com` 上的三个精确播放元数据路径，不扩大到 Splice 媒体域名、账户、DRM 或视频分片接口。
+- Apple TV 继续保留官方英文字幕轨身份；菜单可能仍显示 `English (US) SDH`，选中后字幕 URI 才进入双语翻译网关。
 
 ### v0.7.3 — Paramount+ Apple TV 播放元数据适配
 

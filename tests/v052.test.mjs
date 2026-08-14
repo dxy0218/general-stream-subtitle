@@ -85,7 +85,8 @@ test("Shadowrocket processes Paramount iOS and current tvOS playback metadata", 
   const body = fs.readFileSync(path.join(root, "tests/fixtures/paramount-iphone-playback.json"), "utf8");
   const urls = [
     "https://www.paramountplus.com/apps-api/v2.0/iphone/video/cid/demo-paramount-vod.json?locale=en-US",
-    "https://www.paramountplus.com/apps-api/v3.1/appletvtvos/dynamicplay/show/61457158.json?locale=en&platformType=appletvtvos"
+    "https://www.paramountplus.com/apps-api/v3.1/appletvtvos/dynamicplay/show/61457158.json?locale=en&platformType=appletvtvos",
+    "https://www.paramountplus.com/apps-api/v3.1/appletvtvos/content/playability.json?contentId=demo-paramount-vod"
   ];
   for (const url of urls) {
     const { persistent } = storeRuntime(); let result;
@@ -450,8 +451,8 @@ test("Shadowrocket Paramount metadata rule matches only Apple VOD playback descr
   assert.equal(pattern.test("https://www.paramountplus.com/apps-api/v3.0/ipad/video/cid/demo.json"), true);
   assert.equal(pattern.test("https://www.paramountplus.com/apps-api/v3.1/appletvtvos/dynamicplay/show/61457158.json?platformType=appletvtvos"), true);
   assert.equal(pattern.test("https://www.paramountplus.com/apps-api/v3.1/appletvtvos/dynamicplay/movie/12345.json"), true);
+  assert.equal(pattern.test("https://www.paramountplus.com/apps-api/v3.1/appletvtvos/content/playability.json?contentId=demo"), true);
   assert.equal(pattern.test("https://www.paramountplus.com/apps-api/v3.0/appletvtvos/video/streams/history.json"), false);
-  assert.equal(pattern.test("https://www.paramountplus.com/apps-api/v3.1/appletvtvos/content/playability.json"), false);
   assert.equal(pattern.test("https://www.paramountplus.com/apps-api/v3.3/appletvtvos/irdeto-control/session-token.json"), false);
   assert.equal(pattern.test("https://www.paramountplus.com/apps-api/v2.0/iphone/auth/login.json"), false);
   assert.equal(pattern.test("https://www.paramountplus.com/apps-api/v3.0/iphone/account/profile.json"), false);
