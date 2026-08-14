@@ -1,0 +1,11 @@
+{
+  "itemList": [
+    {
+      "contentId": "demo-paramount-vod",
+      "assetType": "HLS_FPS",
+      "title": "Demo episode",
+      "language": "en-US",
+      "webVTTCaptionURL": "https://vod.pplus.paramount.tech/demo/English_100/stream_vtt.m3u8"
+    }
+  ]
+}

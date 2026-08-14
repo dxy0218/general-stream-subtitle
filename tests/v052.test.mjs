@@ -81,6 +81,24 @@ test("Paramount+ playback JSON preserves the official text-track identity", () =
   assert.match(decodeURIComponent(parsed.playback.textTracks[0].url), /strategy=replace-source/);
 });
 
+test("Shadowrocket processes Paramount Apple playback metadata and virtualizes its caption URL", () => {
+  const body = fs.readFileSync(path.join(root, "tests/fixtures/paramount-iphone-playback.json"), "utf8");
+  const { persistent } = storeRuntime(); let result;
+  run("dist/manifest.js", {
+    $request: { url: "https://www.paramountplus.com/apps-api/v2.0/iphone/video/cid/demo-paramount-vod.json?locale=en-US", headers: {} },
+    $response: { body, headers: { "Content-Type": "application/json" } },
+    $argument: "presetMode=true&safePlayback=true&platformParamount=true&paramountReplaceSource=true&logEnabled=true",
+    $persistentStore: persistent,
+    $done(p) { result = p; }
+  });
+  const parsed = JSON.parse(result.body);
+  const captionUrl = parsed.itemList[0].webVTTCaptionURL;
+  assert.match(captionUrl, /https:\/\/example\.com\/playlist\?/);
+  assert.match(decodeURIComponent(captionUrl), /origin=https:\/\/vod\.pplus\.paramount\.tech\/demo\/English_100\/stream_vtt\.m3u8/);
+  assert.match(decodeURIComponent(captionUrl), /platform=paramount/);
+  assert.match(decodeURIComponent(captionUrl), /strategy=replace-source/);
+});
+
 test("Discovery compatibility mode overrides stored settings and can fully pass through", () => {
   const body = fs.readFileSync(path.join(root, "tests/fixtures/master.m3u8"), "utf8");
   const { store, persistent } = storeRuntime(); let result;
@@ -361,6 +379,7 @@ test("generated modules use dedicated media-only rules for the requested platfor
   }
   const shadow = fs.readFileSync(path.join(root, "modules", "GeneralStreamSubtitle.module"), "utf8");
   assert.match(shadow, /GSS Paramount HLS/);
+  assert.match(shadow, /GSS Paramount Playback Metadata/);
   assert.match(shadow, /GSS Other Media Manifest/);
   assert.match(shadow, /\*\.cbsaavideo\.com/);
   assert.match(shadow, /cbsi\.live\.ott\.irdeto\.com/);
@@ -368,6 +387,7 @@ test("generated modules use dedicated media-only rules for the requested platfor
   assert.match(shadow, /manifest-viki\.viki\.io/);
   assert.match(shadow, /\*\.plex\.direct/);
   assert.doesNotMatch(shadow, /\*\.paramountplus\.com/);
+  assert.match(shadow, /www\.paramountplus\.com/);
   assert.doesNotMatch(shadow, /\*\.cbs\.com/);
   assert.doesNotMatch(shadow, /GSS YouTube Player|GSS YouTube Caption/);
   assert.match(shadow, /^\[Rule\]$/m);
@@ -414,6 +434,18 @@ test("Shadowrocket Paramount rule only intercepts known HLS media hosts", () => 
   assert.equal(pattern.test("https://api.paramountplus.com/graphql"), false);
   assert.equal(pattern.test("https://www.cbs.com/account/profile"), false);
   assert.equal(pattern.test("https://vod.cbsaavideo.com/library/show/manifest.mpd"), false);
+});
+
+test("Shadowrocket Paramount metadata rule matches only Apple VOD playback descriptions", () => {
+  const content = fs.readFileSync(path.join(root, "modules", "GeneralStreamSubtitle.module"), "utf8");
+  const line = content.split("\n").find((item) => item.startsWith("GSS Paramount Playback Metadata ="));
+  const pattern = new RegExp(line.slice(line.indexOf("pattern=") + 8, line.indexOf(", requires-body=")));
+  assert.equal(pattern.test("https://www.paramountplus.com/apps-api/v2.0/iphone/video/cid/demo.json?locale=en-US"), true);
+  assert.equal(pattern.test("https://www.paramountplus.com/apps-api/v3.0/ipad/video/cid/demo.json"), true);
+  assert.equal(pattern.test("https://www.paramountplus.com/apps-api/v2.0/iphone/auth/login.json"), false);
+  assert.equal(pattern.test("https://www.paramountplus.com/apps-api/v3.0/iphone/account/profile.json"), false);
+  assert.equal(pattern.test("https://auth.paramountplus.com/login"), false);
+  assert.equal(pattern.test("https://api.paramountplus.com/graphql"), false);
 });
 
 test("Shadowrocket Gateway GET routes do not require a request body", () => {

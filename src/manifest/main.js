@@ -28,7 +28,10 @@
     if (!platform) { record(null, "platform-unmatched", false, {}, "bypassed"); GSS.Runtime.passThrough(); return; }
     if (!GSS.Platforms.enabled(platform, config)) { record(platform, "platform-disabled", false, {}, "bypassed"); GSS.Runtime.passThrough(); return; }
     var processingMode = "full";
+    var paramountPlaybackMetadata = /^(?:paramount|paramount-live)$/.test(platform.id)
+      && /\/apps-api\/v\d+(?:\.\d+)*\/(?:iphone|ipad|ios|appletv|tvos)\/video\/cid\/[^\/?#]+\.json$/i.test(GSS.Url.path(requestUrl));
     if (platform.id === "discovery") processingMode = String(config.discoveryMode || "full");
+    else if (config.safePlayback && paramountPlaybackMetadata) processingMode = "full";
     else if (config.safePlayback && /^(max|pluto|prime|hulu)$/.test(platform.id)) processingMode = "hls-only";
     else if (config.safePlayback) processingMode = "hls-only";
     if (processingMode === "off") { record(platform, "adapter-off", false, { processingMode: processingMode }, "bypassed"); GSS.Runtime.passThrough(); return; }

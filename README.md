@@ -4,7 +4,7 @@
 
 项目通过 HTTPS MITM 读取播放器清单、播放器响应或文本字幕。默认兼容策略会保留平台原有字幕轨的名称、语言和选择身份，只把字幕 URI 指向翻译网关；也可以切换为新增 **`Translate-zh`** 轨道。播放器请求该轨道后，模块获取原字幕、调用翻译 Provider，并返回双语或纯翻译字幕。
 
-> 当前版本：**v0.7.1**
+> 当前版本：**v0.7.2**
 > 支持系统：iOS、iPadOS、macOS、tvOS（具体能力取决于代理客户端与流媒体 App）  
 > 开源协议：MIT
 
@@ -439,6 +439,12 @@ cdn.example.net
 ```
 
 ## 版本更新记录
+
+### v0.7.2 — Paramount+ Apple 播放元数据接管
+
+- Shadowrocket 仅新增对 `www.paramountplus.com` 精确主机的 MITM，不使用 `*.paramountplus.com`，登录和账户 URL 不进入 GSS 脚本规则。
+- 新增 Apple 客户端 `apps-api/.../iphone|ipad/.../video/cid/*.json` 播放元数据响应规则，修复播放器不再请求主清单时 GSS 完全无日志的问题。
+- Paramount 安全模式允许处理上述窄范围 JSON，并支持 `webVTTCaptionURL`、`closedCaptionURL` 等独立字幕字段；原字幕轨身份保持不变，仅把字幕地址接入翻译网关。
 
 ### v0.7.1 — Paramount+ 缓存兜底与 Pluto TV 远程 DNS
 

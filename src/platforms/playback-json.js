@@ -1,7 +1,9 @@
 GSS.PlaybackJson = (function createPlaybackJsonAdapter() {
   var SPECIFIC_ARRAY = /^(subtitles?|subtitleTracks?|textTracks?|captionTracks?|captions?|closedCaptions?)$/i;
   var GENERIC_ARRAY = /^(tracks?|renditions?|mediaTracks?|assets?)$/i;
-  var URL_KEYS = ["url", "uri", "src", "source", "href", "baseUrl", "downloadUrl", "manifestUrl", "streamUrl", "subtitleUrl", "captionUrl", "file"];
+  var PARAMOUNT_ARRAY = /^(?:itemList|items)$/i;
+  var CAPTION_URL_KEYS = ["webVTTCaptionURL", "webVttCaptionUrl", "closedCaptionURL", "closedCaptionUrl", "sMPTE-TTCCURL", "smpteTtccUrl", "subtitleUrl", "captionUrl"];
+  var URL_KEYS = CAPTION_URL_KEYS.concat(["url", "uri", "src", "source", "href", "baseUrl", "downloadUrl", "manifestUrl", "streamUrl", "file"]);
   var LANGUAGE_KEYS = ["language", "lang", "languageCode", "languageTag", "srclang", "locale"];
   var LABEL_KEYS = ["label", "name", "displayName", "display_name", "title"];
   var ID_KEYS = ["id", "trackId", "assetId", "renditionId"];
@@ -99,6 +101,33 @@ GSS.PlaybackJson = (function createPlaybackJsonAdapter() {
     return cloned;
   }
 
+  function isVirtualUrl(value) {
+    return /(?:gss\.local|example\.com)\/(?:playlist|subtitle)/.test(String(value || ""));
+  }
+
+  function virtualizeCaptionFields(item, requestUrl, config, platform, remaining) {
+    if (!platform || !/^(?:paramount|paramount-live)$/.test(platform.id) || remaining <= 0) return 0;
+    var changed = 0;
+    var language = languageOf(item);
+    if (language && !GSS.Language.matches(language, labelOf(item), config.source)) return 0;
+    CAPTION_URL_KEYS.forEach(function (key) {
+      if (changed >= remaining || typeof item[key] !== "string" || !item[key] || isVirtualUrl(item[key])) return;
+      var absolute = GSS.Url.resolve(requestUrl, item[key]);
+      if (!/^(?:m3u8|vtt|srt|ttml|dfxp|xml|json)$/.test(GSS.Url.extension(absolute))) return;
+      item[key] = GSS.Url.virtual(config.virtualOrigin, GSS.Url.extension(absolute) === "m3u8" ? "/playlist" : "/subtitle", {
+        origin: absolute,
+        mode: "bilingual",
+        source: GSS.Language.googleSource(language, config.source),
+        target: config.target,
+        platform: platform.id,
+        strategy: "replace-source",
+        version: GSS.VERSION
+      });
+      changed += 1;
+    });
+    return changed;
+  }
+
   function virtualize(item, requestUrl, config, platform) {
     var urlField = firstString(item, URL_KEYS);
     if (!urlField) return false;
@@ -129,7 +158,7 @@ GSS.PlaybackJson = (function createPlaybackJsonAdapter() {
     catch (_) { return { body: body, changed: false, summary: { reason: "invalid json" } }; }
 
     var replaceSource = GSS.Platforms.useSourceReplacement(platform, config);
-    var summary = { arraysInspected: 0, textTracks: 0, arraysChanged: 0, injected: 0, selectedLanguage: "", selectedName: "", strategy: replaceSource ? "replace-source" : "duplicate" };
+    var summary = { arraysInspected: 0, textTracks: 0, arraysChanged: 0, scalarCaptionUrls: 0, injected: 0, selectedLanguage: "", selectedName: "", strategy: replaceSource ? "replace-source" : "duplicate" };
     var maxInjections = 4;
     var maxNodes = 5000;
     var nodesVisited = 0;
@@ -138,7 +167,8 @@ GSS.PlaybackJson = (function createPlaybackJsonAdapter() {
       nodesVisited += 1;
       if (!node || depth > 9 || nodesVisited > maxNodes || summary.injected >= maxInjections) return;
       if (Array.isArray(node)) {
-        var relevantKey = SPECIFIC_ARRAY.test(key || "") || GENERIC_ARRAY.test(key || "");
+        var relevantKey = SPECIFIC_ARRAY.test(key || "") || GENERIC_ARRAY.test(key || "")
+          || (/^(?:paramount|paramount-live)$/.test(platform && platform.id || "") && PARAMOUNT_ARRAY.test(key || ""));
         if (relevantKey) {
           summary.arraysInspected += 1;
           var count = node.filter(function (item) { return isTextTrack(item, key || ""); }).length;
@@ -163,6 +193,13 @@ GSS.PlaybackJson = (function createPlaybackJsonAdapter() {
         return;
       }
       if (typeof node === "object") {
+        var scalarChanges = virtualizeCaptionFields(node, requestUrl, config, platform, maxInjections - summary.injected);
+        if (scalarChanges) {
+          summary.scalarCaptionUrls += scalarChanges;
+          summary.injected += scalarChanges;
+          summary.selectedLanguage = languageOf(node) || "auto";
+          summary.selectedName = labelOf(node) || "";
+        }
         Object.keys(node).forEach(function (childKey) {
           if (!SKIP_OBJECT.test(childKey)) walk(node[childKey], childKey, depth + 1);
         });

@@ -40,6 +40,10 @@ const primeDashPattern = String.raw`^https?:\/\/(?:[^\/]+\.)*dash\.row\.aiv-cdn\
 const huluHlsPattern = String.raw`^https?:\/\/(?:(?:vodmanifest|manifest-dp|livemanifest-f|live-sc)\.hulustream\.com|assets\.huluim\.com|assetshuluimcom-a\.akamaihd\.net)\/.*\.m3u8(?:\?.*)?$`;
 const paramountHlsPattern = String.raw`^https?:\/\/(?:(?:[^\/]+\.)*(?:pplus\.paramount\.tech|paramount\.tech|cbsaavideo\.com|cbsivideo\.com)|(?:[^\/.]+-pplus|cc)\.cbs\.com|cbsi\.live\.ott\.irdeto\.com)\/.*\.m3u8(?:\?.*)?$`;
 const paramountPlaybackPattern = String.raw`^https?:\/\/(?:[^\/]+\.)*(?:pplus\.paramount\.tech|paramount\.tech|paramountplus\.com|cbsaavideo\.com|cbsivideo\.com|cbs\.com)\/.*(?:playback|stream|live|linear|channel|station|session|manifest).*`;
+// Paramount's Apple clients obtain the playback description before AVPlayer
+// opens the CDN. Keep this response rule limited to the VOD metadata endpoint;
+// authentication, profile and account paths on the same host are excluded.
+const paramountApplePlaybackPattern = String.raw`^https?:\/\/www\.paramountplus\.com\/apps-api\/v\d+(?:\.\d+)*\/(?:iphone|ipad|ios|appletv|tvos)\/video\/cid\/[^\/?#]+\.json(?:\?.*)?$`;
 // Only media delivery hosts and explicit manifest files are inspected. App,
 // account, playback-session, GraphQL and DRM endpoints stay outside the rule.
 const warnerMediaPattern = String.raw`^https?:\/\/(?:(?:[^\/]+\.)*(?:prod\.media\.max\.com|prd\.media\.max\.com|prod\.media\.h264\.io|prd\.media\.h264\.io|hbomaxcdn\.com)|manifests(?:\.v2)?\.api\.hbo\.com|[^\/.]*discovery[^\/.]*\.uplynk\.com|(?:dplus|discovery)[^\/.]*\.(?:h264\.io|akamaized\.net))\/.*\.(?:m3u8|mpd)(?:\?.*)?$`;
@@ -71,7 +75,7 @@ const shadowMitmHosts = [
   "*.hls.pv-cdn.net", "*.hls.row.aiv-cdn.net", "*avodhlss3ww-a.akamaihd.net",
   "d1v5ir2lpwr8os.cloudfront.net", "d22qjgkvxw22r6.cloudfront.net", "d25xi40x97liuc.cloudfront.net", "d27xxe7juh1us6.cloudfront.net", "dmqdd6hw24ucf.cloudfront.net",
   "vodmanifest.hulustream.com", "manifest-dp.hulustream.com", "livemanifest-f.hulustream.com", "live-sc.hulustream.com", "assets.huluim.com", "assetshuluimcom-a.akamaihd.net",
-  "*.pplus.paramount.tech", "*.paramount.tech", "*.cbsaavideo.com", "*.cbsivideo.com", "*-pplus.cbs.com", "cc.cbs.com", "cbsi.live.ott.irdeto.com",
+  "*.pplus.paramount.tech", "*.paramount.tech", "*.cbsaavideo.com", "*.cbsivideo.com", "*-pplus.cbs.com", "cc.cbs.com", "cbsi.live.ott.irdeto.com", "www.paramountplus.com",
   "*.media.dssott.com", "*.prod.dssott.com", "*.media.starott.com", "*.prod.starott.com", "*.media.dssedge.com", "*.prod.dssedge.com",
   "*.cdn.peacocktv.com", "*.stream.peacocktv.com", "*-vod.fubo.tv", "hls.ted.com",
   "vod-*.live.cf.md.bbci.co.uk", "vod-*-live.akamaized.net", "manifest-viki.viki.io", "*.tubi.video", "*.tubitv.com",
@@ -176,6 +180,7 @@ GSS Pluto HLS = type=http-response, pattern=${plutoHlsPattern}, requires-body=1,
 GSS Prime Video HLS = type=http-response, pattern=${primeHlsPattern}, requires-body=1, max-size=4194304, timeout=20, script-path=${manifestUrl}, argument=${shadowArgs}
 GSS Hulu HLS = type=http-response, pattern=${huluHlsPattern}, requires-body=1, max-size=4194304, timeout=20, script-path=${manifestUrl}, argument=${shadowArgs}
 GSS Paramount HLS = type=http-response, pattern=${paramountHlsPattern}, requires-body=1, max-size=4194304, timeout=20, script-path=${manifestUrl}, argument=${shadowArgs}
+GSS Paramount Playback Metadata = type=http-response, pattern=${paramountApplePlaybackPattern}, requires-body=1, max-size=4194304, timeout=25, script-path=${manifestUrl}, argument=${shadowArgs}
 GSS Gateway = type=http-request, pattern=${gatewayGetPattern}, requires-body=0, timeout=90, script-path=${gatewayUrl}, argument=${shadowArgs}
 GSS Gateway Save = type=http-request, pattern=${gatewaySavePattern}, requires-body=1, timeout=90, script-path=${gatewayUrl}, argument=${shadowArgs}
 
