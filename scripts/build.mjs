@@ -30,6 +30,7 @@ const providerFiles = [
 
 bundle("manifest", base.concat(formatFiles, ["src/platforms/playback-json.js", "src/manifest/m3u8.js", "src/manifest/mpd.js", "src/manifest/main.js"]));
 bundle("gateway", base.concat(formatFiles, providerFiles, ["src/manifest/m3u8.js", "src/subtitle/translate.js", "src/gateway/admin.js", "src/gateway/main.js"]));
+bundle("direct-subtitle", base.concat(formatFiles, providerFiles, ["src/subtitle/translate.js", "src/subtitle/direct-main.js"]));
 bundle("youtube", base.concat(["src/youtube/player.js", "src/youtube/main.js"]));
 bundle("youtube-caption", base.concat(formatFiles, providerFiles, ["src/subtitle/translate.js", "src/youtube/caption-main.js"]));
 
@@ -42,6 +43,7 @@ const huluHlsPattern = String.raw`^https?:\/\/(?:(?:vodmanifest|manifest-dp|live
 // Match only .m3u8 responses: the same hosts may also serve MP4 previews and
 // other binary media which must never enter a response-body script.
 const paramountHlsPattern = String.raw`^https?:\/\/(?:(?:[^\/]+\.)*(?:pplus\.paramount\.tech|paramount\.tech|cbsaavideo\.com|cbsivideo\.com)|(?:[^\/.]+-pplus|cc)\.cbs\.com|cbsi\.live\.ott\.irdeto\.com|splice(?:-media)?\.paramountplus\.com)\/.*\.m3u8(?:\?.*)?$`;
+const paramountVttPattern = String.raw`^https?:\/\/(?:(?:[^\/]+\.)*(?:pplus\.paramount\.tech|paramount\.tech|cbsaavideo\.com|cbsivideo\.com)|(?:[^\/.]+-pplus|cc)\.cbs\.com|cbsi\.live\.ott\.irdeto\.com|splice-media\.paramountplus\.com)\/.*\.(?:vtt|webvtt)(?:\?.*)?$`;
 const paramountPlaybackPattern = String.raw`^https?:\/\/(?:[^\/]+\.)*(?:pplus\.paramount\.tech|paramount\.tech|paramountplus\.com|cbsaavideo\.com|cbsivideo\.com|cbs\.com)\/.*(?:playback|stream|live|linear|channel|station|session|manifest).*`;
 // Paramount's Apple clients obtain the playback description before AVPlayer
 // opens the CDN. Keep this response rule limited to the VOD metadata endpoint;
@@ -105,6 +107,7 @@ const forceHttpHosts = [
 const versionedDistUrl = `${rawBase}/dist/v${encodeURIComponent(pkg.version)}`;
 const manifestUrl = `${versionedDistUrl}/manifest.js`;
 const gatewayUrl = `${versionedDistUrl}/gateway.js`;
+const directSubtitleUrl = `${versionedDistUrl}/direct-subtitle.js`;
 const youtubeUrl = `${versionedDistUrl}/youtube.js`;
 const youtubeCaptionUrl = `${versionedDistUrl}/youtube-caption.js`;
 const defaultArgs = "source=auto&target=zh-CN&trackName=Translate-zh&provider=google-free&platforms=all&discoveryMode=full&safePlayback=false&trackStrategy=replace-source&formats=all&genericMode=false&youtubeStrategy=direct&youtubeUseAsr=true&youtubeLive=true&youtubePreferManual=true&injectTranslated=false&bilingualOrder=translation-first&cacheEnabled=true&logEnabled=true&debug=false";
@@ -145,6 +148,7 @@ GSS Prime Video HLS = type=http-response, pattern=${primeHlsPattern}, requires-b
 GSS Prime Video DASH = type=http-response, pattern=${primeDashPattern}, requires-body=1, max-size=4194304, timeout=20, script-path=${manifestUrl}, argument=${surgeArgs}
 GSS Hulu HLS = type=http-response, pattern=${huluHlsPattern}, requires-body=1, max-size=4194304, timeout=20, script-path=${manifestUrl}, argument=${surgeArgs}
 GSS Paramount HLS = type=http-response, pattern=${paramountHlsPattern}, requires-body=1, max-size=4194304, timeout=20, script-path=${manifestUrl}, argument=${surgeArgs}
+GSS Paramount tvOS WebVTT = type=http-response, pattern=${paramountVttPattern}, requires-body=1, max-size=1048576, timeout=90, script-path=${directSubtitleUrl}, argument=${surgeArgs}
 GSS Paramount Playback = type=http-response, pattern=${paramountPlaybackPattern}, requires-body=1, max-size=4194304, timeout=25, script-path=${manifestUrl}, argument=${surgeArgs}
 GSS Gateway = type=http-request, pattern=${gatewayGetPattern}, requires-body=0, timeout=90, script-path=${gatewayUrl}, argument=${surgeArgs}
 GSS Gateway Save = type=http-request, pattern=${gatewaySavePattern}, requires-body=1, timeout=90, script-path=${gatewayUrl}, argument=${surgeArgs}
@@ -167,6 +171,7 @@ http-response ${primeHlsPattern} script-path=${manifestUrl}, timeout=20, require
 http-response ${primeDashPattern} script-path=${manifestUrl}, timeout=20, requires-body=true, argument=${defaultArgs}, tag=GSS Prime Video DASH, enable=true
 http-response ${huluHlsPattern} script-path=${manifestUrl}, timeout=20, requires-body=true, argument=${defaultArgs}, tag=GSS Hulu HLS, enable=true
 http-response ${paramountHlsPattern} script-path=${manifestUrl}, timeout=20, requires-body=true, argument=${defaultArgs}, tag=GSS Paramount HLS, enable=true
+http-response ${paramountVttPattern} script-path=${directSubtitleUrl}, timeout=90, requires-body=true, argument=${defaultArgs}, tag=GSS Paramount tvOS WebVTT, enable=true
 http-response ${paramountPlaybackPattern} script-path=${manifestUrl}, timeout=25, requires-body=true, argument=${defaultArgs}, tag=GSS Paramount Playback, enable=true
 http-request ${gatewayGetPattern} script-path=${gatewayUrl}, timeout=90, requires-body=false, argument=${defaultArgs}, tag=GSS Gateway, enable=true
 http-request ${gatewaySavePattern} script-path=${gatewayUrl}, timeout=90, requires-body=true, argument=${defaultArgs}, tag=GSS Gateway Save, enable=true
@@ -190,6 +195,7 @@ GSS Pluto HLS = type=http-response, pattern=${plutoHlsPattern}, requires-body=1,
 GSS Prime Video HLS = type=http-response, pattern=${primeHlsPattern}, requires-body=1, max-size=4194304, timeout=20, script-path=${manifestUrl}, argument=${shadowArgs}
 GSS Hulu HLS = type=http-response, pattern=${huluHlsPattern}, requires-body=1, max-size=4194304, timeout=20, script-path=${manifestUrl}, argument=${shadowArgs}
 GSS Paramount HLS = type=http-response, pattern=${paramountHlsPattern}, requires-body=1, max-size=4194304, timeout=20, script-path=${manifestUrl}, argument=${shadowArgs}
+GSS Paramount tvOS WebVTT = type=http-response, pattern=${paramountVttPattern}, requires-body=1, max-size=1048576, timeout=90, script-path=${directSubtitleUrl}, argument=${shadowArgs}
 GSS Paramount Playback Metadata = type=http-response, pattern=${paramountApplePlaybackPattern}, requires-body=1, max-size=4194304, timeout=25, script-path=${manifestUrl}, argument=${shadowArgs}
 GSS Gateway = type=http-request, pattern=${gatewayGetPattern}, requires-body=0, timeout=90, script-path=${gatewayUrl}, argument=${shadowArgs}
 GSS Gateway Save = type=http-request, pattern=${gatewaySavePattern}, requires-body=1, timeout=90, script-path=${gatewayUrl}, argument=${shadowArgs}

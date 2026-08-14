@@ -1,4 +1,4 @@
-// General Stream Subtitle 0.8.1 - manifest
+// General Stream Subtitle 0.8.1 - direct-subtitle
 // MIT License - generated file; edit src/ instead.
 (function () {
 "use strict";
@@ -1133,961 +1133,480 @@ GSS.Formats.register("json", (function createJsonFormat() {
   return { id: "json", name: "Generic JSON Cues", contentType: "application/json; charset=utf-8", detect: detect, parse: parse, render: render };
 })());
 
-GSS.PlaybackJson = (function createPlaybackJsonAdapter() {
-  var SPECIFIC_ARRAY = /^(subtitles?|subtitleTracks?|textTracks?|captionTracks?|captions?|closedCaptions?)$/i;
-  var GENERIC_ARRAY = /^(tracks?|renditions?|mediaTracks?|assets?)$/i;
-  var PARAMOUNT_ARRAY = /^(?:itemList|items)$/i;
-  var CAPTION_URL_KEYS = ["webVTTCaptionURL", "webVttCaptionUrl", "closedCaptionURL", "closedCaptionUrl", "sMPTE-TTCCURL", "smpteTtccUrl", "subtitleUrl", "captionUrl"];
-  var URL_KEYS = CAPTION_URL_KEYS.concat(["url", "uri", "src", "source", "href", "baseUrl", "downloadUrl", "manifestUrl", "streamUrl", "file"]);
-  var LANGUAGE_KEYS = ["language", "lang", "languageCode", "languageTag", "srclang", "locale"];
-  var LABEL_KEYS = ["label", "name", "displayName", "display_name", "title"];
-  var ID_KEYS = ["id", "trackId", "assetId", "renditionId"];
-  var SKIP_OBJECT = /^(ads?|advertising|analytics|beacons?|drm|images?|artwork|telemetry|tracking)$/i;
+GSS.Providers = (function createProviderRegistry() {
+  var registry = {};
 
-  function firstString(object, keys) {
-    for (var i = 0; i < keys.length; i += 1) {
-      if (typeof object[keys[i]] === "string" && object[keys[i]]) return { key: keys[i], value: object[keys[i]] };
-    }
-    return null;
-  }
-
-  function descriptor(item) {
-    return [item.kind, item.type, item.role, item.format, item.mimeType, item.codec, item.label, item.name]
-      .filter(function (value) { return typeof value === "string"; }).join(" ");
-  }
-
-  function isTextTrack(item, parentKey) {
-    if (!item || typeof item !== "object" || Array.isArray(item)) return false;
-    var url = firstString(item, URL_KEYS);
-    if (!url) return false;
-    if (SPECIFIC_ARRAY.test(parentKey)) return true;
-    var details = descriptor(item);
-    if (/(subtitle|caption|closed.?caption|text|webvtt|vtt|ttml|dfxp|imsc|srt)/i.test(details)) return true;
-    var extension = GSS.Url.extension(url.value);
-    return /^(vtt|srt|ttml|dfxp|xml|json)$/.test(extension);
-  }
-
-  function languageOf(item) {
-    var found = firstString(item, LANGUAGE_KEYS);
-    return found ? found.value : "";
-  }
-
-  function labelOf(item) {
-    var found = firstString(item, LABEL_KEYS);
-    return found ? found.value : "";
-  }
-
-  function score(item, config) {
-    var language = languageOf(item), label = labelOf(item), value = 0;
-    value += GSS.Language.priority(language, label, config.sourcePriority);
-    if (item.default === true || item.isDefault === true || item.selected === true) value += 80;
-    if (/forced/i.test(descriptor(item))) value -= 100;
-    if (/(sdh|closed.?caption|cc)/i.test(label)) value -= 4;
-    return value;
-  }
-
-  function choose(array, parentKey, config) {
-    var candidates = [];
-    array.forEach(function (item, index) {
-      if (!isTextTrack(item, parentKey)) return;
-      var language = languageOf(item), label = labelOf(item);
-      if (!GSS.Language.matches(language, label, config.source)) return;
-      candidates.push({ item: item, index: index, score: score(item, config) });
-    });
-    candidates.sort(function (a, b) { return b.score - a.score || a.index - b.index; });
-    return candidates[0] || null;
-  }
-
-  function setExistingOrDefault(object, keys, value, fallbackKey) {
-    var changed = false;
-    keys.forEach(function (key) {
-      if (Object.prototype.hasOwnProperty.call(object, key)) { object[key] = value; changed = true; }
-    });
-    if (!changed && fallbackKey) object[fallbackKey] = value;
-  }
-
-  function routeFor(item, origin) {
-    var details = descriptor(item);
-    return GSS.Url.extension(origin) === "m3u8" || /hls/i.test(details) ? "/playlist" : "/subtitle";
-  }
-
-  function duplicate(item, requestUrl, config, platform) {
-    var cloned = JSON.parse(JSON.stringify(item));
-    var urlField = firstString(cloned, URL_KEYS);
-    if (!urlField) return null;
-    var absolute = GSS.Url.resolve(requestUrl, urlField.value);
-    cloned[urlField.key] = GSS.Url.virtual(config.virtualOrigin, routeFor(cloned, absolute), {
-      origin: absolute,
-      mode: "bilingual",
-      source: GSS.Language.googleSource(languageOf(cloned), config.source),
-      target: config.target,
-      platform: platform ? platform.id : "unknown",
-      version: GSS.VERSION
-    });
-    setExistingOrDefault(cloned, LABEL_KEYS, config.trackName, "label");
-    setExistingOrDefault(cloned, LANGUAGE_KEYS, config.target, "language");
-    ID_KEYS.forEach(function (key) {
-      if (typeof cloned[key] === "string" || typeof cloned[key] === "number") cloned[key] = String(cloned[key]) + "-gss";
-    });
-    ["default", "isDefault", "selected", "autoSelect", "autoselect", "forced", "isForced"].forEach(function (key) {
-      if (Object.prototype.hasOwnProperty.call(cloned, key)) cloned[key] = false;
-    });
-    cloned.gssTranslated = true;
-    return cloned;
-  }
-
-  function isVirtualUrl(value) {
-    return /(?:(?:gss\.local|example\.com)\/(?:manifest|playlist|subtitle)|\/__gss__\/(?:manifest|playlist|subtitle))/.test(String(value || ""));
-  }
-
-  function isKnownParamountManifest(url) {
-    if (typeof url !== "string" || !/^https?:\/\//i.test(url)) return false;
-    if (GSS.Url.extension(url) !== "m3u8") return false;
-    var host = GSS.Url.host(url);
-    return /(^|\.)(?:pplus\.paramount\.tech|paramount\.tech|cbsaavideo\.com|cbsivideo\.com)$/.test(host)
-      || /^(?:[^.]+-pplus|cc)\.cbs\.com$/.test(host)
-      || host === "cbsi.live.ott.irdeto.com"
-      || host === "splice-media.paramountplus.com";
-  }
-
-  function isParamountSubtitleManifest(url, key) {
-    var captionField = CAPTION_URL_KEYS.some(function (candidate) {
-      return String(candidate).toLowerCase() === String(key || "").toLowerCase();
-    });
-    if (captionField) return true;
-    var path = GSS.Url.path(url).toLowerCase();
-    return /(?:^|\/)(?:stream_vtt|manifest_[^/]*|[^/]*(?:subtitle|caption|webvtt|text)[^/]*)\.m3u8$/.test(path)
-      || /\/(?:subtitles?|captions?|webvtt|text)\//.test(path);
-  }
-
-  function virtualizeCaptionFields(item, requestUrl, config, platform, remaining) {
-    if (!platform || !/^(?:paramount|paramount-live)$/.test(platform.id) || remaining <= 0) return 0;
-    var changed = 0;
-    var language = languageOf(item);
-    if (language && !GSS.Language.matches(language, labelOf(item), config.source)) return 0;
-    CAPTION_URL_KEYS.forEach(function (key) {
-      if (changed >= remaining || typeof item[key] !== "string" || !item[key] || isVirtualUrl(item[key])) return;
-      var absolute = GSS.Url.resolve(requestUrl, item[key]);
-      if (!/^(?:m3u8|vtt|srt|ttml|dfxp|xml|json)$/.test(GSS.Url.extension(absolute))) return;
-      item[key] = GSS.Url.virtual(config.virtualOrigin, GSS.Url.extension(absolute) === "m3u8" ? "/playlist" : "/subtitle", {
-        origin: absolute,
-        mode: "bilingual",
-        source: GSS.Language.googleSource(language, config.source),
-        target: config.target,
-        platform: platform.id,
-        strategy: "replace-source",
-        version: GSS.VERSION
-      });
-      changed += 1;
-    });
-    return changed;
-  }
-
-  function virtualize(item, requestUrl, config, platform) {
-    var urlField = firstString(item, URL_KEYS);
-    if (!urlField) return false;
-    var absolute = GSS.Url.resolve(requestUrl, urlField.value);
-    item[urlField.key] = GSS.Url.virtual(config.virtualOrigin, routeFor(item, absolute), {
-      origin: absolute,
-      mode: "bilingual",
-      source: GSS.Language.googleSource(languageOf(item), config.source),
-      target: config.target,
-      platform: platform ? platform.id : "unknown",
-      strategy: "replace-source",
-      version: GSS.VERSION
-    });
-    return true;
-  }
-
-  function hasInjected(array, config) {
-    return array.some(function (item) {
-      var url = item && typeof item === "object" ? firstString(item, URL_KEYS) : null;
-      return item && typeof item === "object" && (item.gssTranslated === true || labelOf(item) === config.trackName
-        || (url && /(?:(?:gss\.local|example\.com)\/(?:playlist|subtitle)|\/__gss__\/(?:playlist|subtitle))/.test(url.value)));
-    });
-  }
-
-  function refreshParamountManifests(body, logger, platform, options) {
-    options = options || {};
-    var value;
-    try { value = JSON.parse(String(body || "")); }
-    catch (_) { return { body: body, changed: false, summary: { reason: "invalid json" } }; }
-
-    var summary = { manifests: 0, unsignedManifests: 0, signedManifestsSkipped: 0, nodesVisited: 0 };
-    var maxNodes = 5000;
-
-    function refreshUrl(url) {
-      if (!isKnownParamountManifest(url)) return url;
-      summary.manifests += 1;
-      // Do not alter signed CDN URLs. The observed tvOS VOD master is public
-      // and query-free; changing an authenticated query could break playback.
-      if (url.indexOf("?") >= 0) { summary.signedManifestsSkipped += 1; return url; }
-      summary.unsignedManifests += 1;
-      return url + "?gss_manifest_version=" + encodeURIComponent(GSS.VERSION);
-    }
-
-    function walk(node, depth) {
-      summary.nodesVisited += 1;
-      if (!node || depth > 9 || summary.nodesVisited > maxNodes) return;
-      if (Array.isArray(node)) {
-        for (var i = 0; i < node.length; i += 1) {
-          if (typeof node[i] === "string") node[i] = refreshUrl(node[i]);
-          else walk(node[i], depth + 1);
-        }
-        return;
-      }
-      if (typeof node !== "object") return;
-      Object.keys(node).forEach(function (key) {
-        if (typeof node[key] === "string") node[key] = refreshUrl(node[key]);
-        else walk(node[key], depth + 1);
-      });
-    }
-
-    walk(value, 0);
-    var changed = summary.unsignedManifests > 0;
-    summary.reason = changed ? "unsigned HLS manifest cache refreshed"
-      : (summary.manifests ? "only signed HLS manifests found" : "no supported HLS manifest URL");
-    if (changed && options.logChanged !== false) logger.warn(options.changedMessage || "Paramount session HLS manifest cache refreshed", {
-      platform: platform ? platform.id : "unknown",
-      endpoint: options.endpoint || "session-token",
-      manifests: summary.unsignedManifests,
-      signedSkipped: summary.signedManifestsSkipped
-    });
-    else if (!changed && options.logMissing !== false) logger.warn(options.missingMessage || "Paramount session exposed no refreshable HLS manifest URL", {
-      platform: platform ? platform.id : "unknown",
-      endpoint: options.endpoint || "session-token",
-      reason: summary.reason,
-      manifests: summary.manifests,
-      signedSkipped: summary.signedManifestsSkipped,
-      nodesVisited: summary.nodesVisited
-    });
-    return { body: changed ? JSON.stringify(value) : body, changed: changed, summary: summary };
-  }
-
-  function proxyParamountManifests(body, config, logger, platform, endpoint) {
-    var value;
-    try { value = JSON.parse(String(body || "")); }
-    catch (_) { return { body: body, changed: false, summary: { reason: "invalid json" } }; }
-
-    var summary = { manifests: 0, unsignedManifests: 0, signedManifestsSkipped: 0, nodesVisited: 0 };
-    var maxNodes = 5000;
-
-    function proxyUrl(url, key) {
-      if (!isKnownParamountManifest(url) || isVirtualUrl(url) || isParamountSubtitleManifest(url, key)) return url;
-      summary.manifests += 1;
-      if (url.indexOf("?") >= 0) { summary.signedManifestsSkipped += 1; return url; }
-      summary.unsignedManifests += 1;
-      // Keep Paramount's trusted media hostname while changing the cache key.
-      // Shadowrocket answers /__gss__ locally before the request reaches CDN.
-      return GSS.Url.virtual(GSS.Url.origin(url) + "/__gss__", "/manifest", {
-        origin: url,
-        mode: "bilingual",
-        source: config.source,
-        target: config.target,
-        platform: platform ? platform.id : "paramount",
-        version: GSS.VERSION
-      });
-    }
-
-    function walk(node, depth, parentKey) {
-      summary.nodesVisited += 1;
-      if (!node || depth > 9 || summary.nodesVisited > maxNodes) return;
-      if (Array.isArray(node)) {
-        for (var i = 0; i < node.length; i += 1) {
-          if (typeof node[i] === "string") node[i] = proxyUrl(node[i], parentKey);
-          else walk(node[i], depth + 1, parentKey);
-        }
-        return;
-      }
-      if (typeof node !== "object") return;
-      Object.keys(node).forEach(function (key) {
-        if (typeof node[key] === "string") node[key] = proxyUrl(node[key], key);
-        else walk(node[key], depth + 1, key);
-      });
-    }
-
-    walk(value, 0, "");
-    var changed = summary.unsignedManifests > 0;
-    summary.reason = changed ? "unsigned HLS manifest routed through Gateway"
-      : (summary.manifests ? "only signed HLS manifests found" : "no supported HLS manifest URL");
-    if (changed) logger.warn("Paramount playback manifest routed through Gateway", {
-      platform: platform ? platform.id : "unknown",
-      endpoint: endpoint || "playback-metadata",
-      manifests: summary.unsignedManifests,
-      signedSkipped: summary.signedManifestsSkipped
-    });
-    return { body: changed ? JSON.stringify(value) : body, changed: changed, summary: summary };
-  }
-
-  function adaptParamountPlayback(body, requestUrl, config, logger, platform, endpoint) {
-    // Paramount tvOS strips or bypasses an added query string and resumes
-    // directly at media segments. Give AVPlayer an unmistakably different
-    // master URL whose response is produced by the local Gateway instead.
-    var proxied = proxyParamountManifests(body, config, logger, platform, endpoint);
-    var injected = inject(proxied.body, requestUrl, config, logger, platform);
-    var summary = injected.summary || {};
-    summary.manifests = proxied.summary && proxied.summary.manifests || 0;
-    summary.unsignedManifests = proxied.summary && proxied.summary.unsignedManifests || 0;
-    summary.signedManifestsSkipped = proxied.summary && proxied.summary.signedManifestsSkipped || 0;
-    summary.manifestProxyReason = proxied.summary && proxied.summary.reason || "";
-    return {
-      body: injected.body,
-      changed: !!(proxied.changed || injected.changed),
-      summary: summary
-    };
-  }
-
-  function inject(body, requestUrl, config, logger, platform) {
-    var value;
-    try { value = JSON.parse(String(body || "")); }
-    catch (_) { return { body: body, changed: false, summary: { reason: "invalid json" } }; }
-
-    var replaceSource = GSS.Platforms.useSourceReplacement(platform, config);
-    var summary = { arraysInspected: 0, textTracks: 0, arraysChanged: 0, scalarCaptionUrls: 0, injected: 0, selectedLanguage: "", selectedName: "", strategy: replaceSource ? "replace-source" : "duplicate" };
-    var maxInjections = 4;
-    var maxNodes = 5000;
-    var nodesVisited = 0;
-
-    function walk(node, key, depth) {
-      nodesVisited += 1;
-      if (!node || depth > 9 || nodesVisited > maxNodes || summary.injected >= maxInjections) return;
-      if (Array.isArray(node)) {
-        var relevantKey = SPECIFIC_ARRAY.test(key || "") || GENERIC_ARRAY.test(key || "")
-          || (/^(?:paramount|paramount-live)$/.test(platform && platform.id || "") && PARAMOUNT_ARRAY.test(key || ""));
-        if (relevantKey) {
-          summary.arraysInspected += 1;
-          var count = node.filter(function (item) { return isTextTrack(item, key || ""); }).length;
-          summary.textTracks += count;
-          if (count && !hasInjected(node, config)) {
-            var selected = choose(node, key || "", config);
-            if (selected) {
-              var changed = replaceSource
-                ? virtualize(selected.item, requestUrl, config, platform)
-                : duplicate(selected.item, requestUrl, config, platform);
-              if (changed) {
-                if (!replaceSource) node.splice(selected.index + 1, 0, changed);
-                summary.arraysChanged += 1;
-                summary.injected += 1;
-                summary.selectedLanguage = languageOf(selected.item) || "auto";
-                summary.selectedName = labelOf(selected.item) || "";
-              }
-            }
-          }
-        }
-        node.forEach(function (item) { walk(item, key, depth + 1); });
-        return;
-      }
-      if (typeof node === "object") {
-        var scalarChanges = virtualizeCaptionFields(node, requestUrl, config, platform, maxInjections - summary.injected);
-        if (scalarChanges) {
-          summary.scalarCaptionUrls += scalarChanges;
-          summary.injected += scalarChanges;
-          summary.selectedLanguage = languageOf(node) || "auto";
-          summary.selectedName = labelOf(node) || "";
-        }
-        Object.keys(node).forEach(function (childKey) {
-          if (!SKIP_OBJECT.test(childKey)) walk(node[childKey], childKey, depth + 1);
-        });
-      }
-    }
-
-    walk(value, "", 0);
-    if (summary.injected) {
-      logger.info("playback JSON inspected", {
-        platform: platform ? platform.id : "unknown", injected: summary.injected,
-        selectedName: summary.selectedName, selectedLanguage: summary.selectedLanguage
-      });
-      return { body: JSON.stringify(value), changed: true, summary: summary };
-    }
-    summary.nodesVisited = nodesVisited;
-    summary.reason = nodesVisited > maxNodes ? "node budget exceeded" : (summary.textTracks ? "no matching text track" : "no supported text-track array");
-    logger.info("playback JSON inspected", { platform: platform ? platform.id : "unknown", injected: 0, reason: summary.reason, arrays: summary.arraysInspected, textTracks: summary.textTracks });
-    return { body: body, changed: false, summary: summary };
-  }
-
-  return {
-    inject: inject,
-    refreshParamountManifests: refreshParamountManifests,
-    proxyParamountManifests: proxyParamountManifests,
-    adaptParamountPlayback: adaptParamountPlayback
-  };
-})();
-
-GSS.M3U8 = (function createM3U8Tools() {
-  function parseAttributes(line) {
-    var colon = line.indexOf(":"), source = colon >= 0 ? line.slice(colon + 1) : line;
-    var items = [], buffer = "", quoted = false;
-    for (var i = 0; i < source.length; i += 1) {
-      var char = source[i];
-      if (char === '"') quoted = !quoted;
-      if (char === "," && !quoted) { items.push(buffer); buffer = ""; } else buffer += char;
-    }
-    if (buffer) items.push(buffer);
-    var attributes = [];
-    items.forEach(function (item) {
-      var equals = item.indexOf("=");
-      if (equals < 0) return;
-      var key = item.slice(0, equals).trim(), raw = item.slice(equals + 1).trim();
-      var isQuoted = raw.length >= 2 && raw[0] === '"' && raw[raw.length - 1] === '"';
-      attributes.push({ key: key, value: isQuoted ? raw.slice(1, -1) : raw, quoted: isQuoted });
-    });
-    return attributes;
-  }
-
-  function get(attributes, key) {
-    key = key.toUpperCase();
-    for (var i = 0; i < attributes.length; i += 1) if (attributes[i].key.toUpperCase() === key) return attributes[i].value;
-    return null;
-  }
-
-  function set(attributes, key, value, quoted) {
-    var upper = key.toUpperCase();
-    for (var i = 0; i < attributes.length; i += 1) {
-      if (attributes[i].key.toUpperCase() === upper) { attributes[i].value = value; attributes[i].quoted = quoted; return; }
-    }
-    attributes.push({ key: key, value: value, quoted: quoted });
-  }
-
-  function remove(attributes, key) {
-    var upper = key.toUpperCase();
-    for (var i = attributes.length - 1; i >= 0; i -= 1) {
-      if (attributes[i].key.toUpperCase() === upper) attributes.splice(i, 1);
-    }
-  }
-
-  function serialize(tag, attributes) {
-    return tag + ":" + attributes.map(function (attribute) {
-      var value = attribute.quoted ? '"' + String(attribute.value).replace(/"/g, "") + '"' : attribute.value;
-      return attribute.key + "=" + value;
-    }).join(",");
-  }
-
-  function candidateScore(attributes, config) {
-    var name = String(get(attributes, "NAME") || "");
-    var language = String(get(attributes, "LANGUAGE") || "");
-    var score = 0;
-    if (String(get(attributes, "DEFAULT") || "").toUpperCase() === "YES") score += 100;
-    if (String(get(attributes, "AUTOSELECT") || "").toUpperCase() === "YES") score += 10;
-    score += GSS.Language.priority(language, name, config.sourcePriority);
-    if (/\b(sdh|cc|closed captions?|descriptive|audio description)\b/i.test(name)) score -= 8;
-    return score;
-  }
-
-  function chooseSourceTrack(lines, config) {
-    var candidates = [];
-    lines.forEach(function (line, index) {
-      if (line.indexOf("#EXT-X-MEDIA:") !== 0) return;
-      var attributes = parseAttributes(line);
-      if (String(get(attributes, "TYPE") || "").toUpperCase() !== "SUBTITLES") return;
-      if (String(get(attributes, "FORCED") || "").toUpperCase() === "YES") return;
-      if (!get(attributes, "URI")) return;
-      var language = String(get(attributes, "LANGUAGE") || "");
-      var name = String(get(attributes, "NAME") || "");
-      if (!GSS.Language.matches(language, name, config.source)) return;
-      candidates.push({
-        index: index,
-        line: line,
-        attributes: attributes,
-        language: language,
-        name: name,
-        score: candidateScore(attributes, config)
-      });
-    });
-    if (!candidates.length) return null;
-    candidates.sort(function (a, b) {
-      if (b.score !== a.score) return b.score - a.score;
-      return a.index - b.index;
-    });
-    return candidates[0];
-  }
-
-  function duplicateTrack(candidate, requestUrl, mode, config, platform) {
-    var tag = candidate.line.slice(0, candidate.line.indexOf(":"));
-    var attributes = parseAttributes(candidate.line);
-    var originalUri = get(attributes, "URI");
-    if (!originalUri) return null;
-    var absoluteOrigin = GSS.Url.resolve(requestUrl, originalUri);
-    var name = mode === "bilingual" ? config.trackName : config.translatedTrackName;
-    var source = GSS.Language.googleSource(candidate.language, config.source);
-    var renditionLanguage = config.target;
-    if (platform && platform.id === "max") {
-      if (/^(?:zh-cn|zh-hans)$/i.test(renditionLanguage)) renditionLanguage = "zh-Hans";
-      else if (/^(?:zh-tw|zh-hk|zh-mo|zh-hant)$/i.test(renditionLanguage)) renditionLanguage = "zh-Hant";
-    }
-    set(attributes, "NAME", name, true);
-    set(attributes, "LANGUAGE", renditionLanguage, true);
-    set(attributes, "DEFAULT", "NO", false);
-    // Max/tvOS re-evaluates AUTOSELECT renditions after loading their first
-    // subtitle segment. Keep the synthetic track explicit-only so that the
-    // app does not replace or remove the user's manual selection.
-    set(attributes, "AUTOSELECT", platform && platform.id === "max" ? "NO" : "YES", false);
-    set(attributes, "FORCED", "NO", false);
-    if (platform && platform.id === "max") {
-      // These describe the source CC rendition, not the translated duplicate,
-      // and can make Max's custom media-selection UI reject the new language.
-      remove(attributes, "ASSOC-LANGUAGE");
-      remove(attributes, "CHARACTERISTICS");
-    }
-    var sourceStableId = get(attributes, "STABLE-RENDITION-ID");
-    if (sourceStableId) {
-      // The source stable ID is intentionally independent of the selected CDN.
-      // Hashing the absolute URI caused Max's GCP/Akamai/CloudFront refreshes to
-      // present the same translated track as a different rendition.
-      set(attributes, "STABLE-RENDITION-ID", "gss-" + GSS.Hash([
-        sourceStableId,
-        get(attributes, "GROUP-ID") || "",
-        mode,
-        config.target,
-        platform ? platform.id : "unknown"
-      ].join("|")), true);
-    }
-    set(attributes, "URI", GSS.Url.virtual(config.virtualOrigin, "/playlist", {
-      origin: absoluteOrigin,
-      mode: mode,
-      source: source,
-      target: config.target,
-      platform: platform ? platform.id : "unknown",
-      version: GSS.VERSION
-    }), true);
-    return serialize(tag, attributes);
-  }
-
-  function virtualizeSourceTrack(candidate, requestUrl, config, platform) {
-    var tag = candidate.line.slice(0, candidate.line.indexOf(":"));
-    var attributes = parseAttributes(candidate.line);
-    var originalUri = get(attributes, "URI");
-    if (!originalUri) return null;
-    // Preserve every identity and selection attribute exactly as the platform supplied
-    // it. Only the media URI changes, so the app continues to trust this as its
-    // original en-US CC rendition while the Gateway returns bilingual VTT.
-    set(attributes, "URI", GSS.Url.virtual(config.virtualOrigin, "/playlist", {
-      origin: GSS.Url.resolve(requestUrl, originalUri),
-      mode: "bilingual",
-      source: GSS.Language.googleSource(candidate.language, config.source),
-      target: config.target,
-      platform: platform ? platform.id : "unknown",
-      strategy: "replace-source",
-      version: GSS.VERSION
-    }), true);
-    return serialize(tag, attributes);
-  }
-
-  function inspectTrackTypes(lines) {
-    var summary = { subtitles: 0, closedCaptions: 0, subtitleUris: 0, virtualSubtitleUris: 0, renditions: [] };
-    lines.forEach(function (line) {
-      if (line.indexOf("#EXT-X-MEDIA:") !== 0) return;
-      var attributes = parseAttributes(line);
-      var type = String(get(attributes, "TYPE") || "").toUpperCase();
-      if (type === "SUBTITLES") {
-        summary.subtitles += 1;
-        var uri = String(get(attributes, "URI") || "");
-        if (uri) summary.subtitleUris += 1;
-        if (/(?:gss\.local|example\.com)\/playlist/.test(uri)) summary.virtualSubtitleUris += 1;
-        if (summary.renditions.length < 8) summary.renditions.push({
-          group: String(get(attributes, "GROUP-ID") || ""),
-          name: String(get(attributes, "NAME") || ""),
-          language: String(get(attributes, "LANGUAGE") || ""),
-          default: String(get(attributes, "DEFAULT") || ""),
-          autoselect: String(get(attributes, "AUTOSELECT") || ""),
-          forced: String(get(attributes, "FORCED") || ""),
-          stableId: get(attributes, "STABLE-RENDITION-ID") ? "present" : "absent",
-          assocLanguage: String(get(attributes, "ASSOC-LANGUAGE") || ""),
-          characteristics: String(get(attributes, "CHARACTERISTICS") || ""),
-          virtual: /(?:gss\.local|example\.com)\/playlist/.test(uri)
-        });
-      }
-      if (type === "CLOSED-CAPTIONS") summary.closedCaptions += 1;
-    });
-    return summary;
-  }
-
-  function isMediaPlaylist(body) {
-    if (!body || body.indexOf("#EXTM3U") < 0) return false;
-    var hasSegments = /#EXTINF:|#EXT-X-MEDIA-SEQUENCE:|#EXT-X-PART:/i.test(body);
-    var hasVariants = /#EXT-X-STREAM-INF:|#EXT-X-I-FRAME-STREAM-INF:/i.test(body);
-    var hasRenditions = /#EXT-X-MEDIA:/i.test(body);
-    return hasSegments && !hasVariants && !hasRenditions;
-  }
-
-  function isDirectSubtitlePlaylist(url, platform) {
-    if (!platform || platform.id === "max") return false;
-    var path = GSS.Url.path(url).toLowerCase();
-    if (!/\.m3u8$/.test(path)) return false;
-    if (/^(?:paramount|paramount-live)$/.test(platform.id)) {
-      return /(?:^|\/)(?:stream_vtt|manifest_[^/]*|[^/]*(?:subtitle|caption|webvtt|text)[^/]*)\.m3u8$/.test(path)
-        || /\/(?:subtitles?|captions?|webvtt|text)\//.test(path);
-    }
-    if (platform.id === "pluto") {
-      return /\/subtitle\/[^/]+\/playlist\.m3u8$/.test(path)
-        || /\/(?:subtitles?|captions?|webvtt)\//.test(path);
-    }
-    return false;
-  }
-
-  function injectTracks(body, requestUrl, config, logger, platform) {
-    if (!config.enabled || !body || body.indexOf("#EXTM3U") < 0) return body;
-    if (/(?:gss\.local|example\.com)\/playlist/.test(body)) return body;
-    if (isMediaPlaylist(body)) {
-      logger.debug("media playlist bypassed", { platform: platform ? platform.id : "unknown" });
-      return body;
-    }
-    var lines = body.replace(/\r\n/g, "\n").split("\n");
-    var selected = chooseSourceTrack(lines, config);
-    if (!selected) {
-      var trackTypes = inspectTrackTypes(lines);
-      var reason = trackTypes.closedCaptions > 0 && trackTypes.subtitleUris === 0
-        ? "in-band closed captions only"
-        : (trackTypes.subtitles > 0 ? "no matching text subtitle track" : "no subtitle rendition declared");
-      logger.info("master manifest inspected", {
-        platform: platform ? platform.id : "unknown",
-        injected: 0,
-        source: config.source,
-        subtitleTracks: trackTypes.subtitles,
-        subtitleUris: trackTypes.subtitleUris,
-        closedCaptionTracks: trackTypes.closedCaptions,
-        reason: reason
-      });
-      return body;
-    }
-
-    var output = [], injected = 0;
-    var replaceSource = !!(platform && (
-      (config.maxReplaceSource && platform.id === "max")
-      || (config.paramountReplaceSource && /^(?:paramount|paramount-live)$/.test(platform.id))
-      || GSS.Platforms.useSourceReplacement(platform, config)
-    ));
-    lines.forEach(function (line, index) {
-      if (index !== selected.index) { output.push(line); return; }
-      if (replaceSource) {
-        var replacement = virtualizeSourceTrack(selected, requestUrl, config, platform);
-        output.push(replacement || line);
-        if (replacement) injected += 1;
-        if (replacement && config.injectTranslated && platform.id !== "max") {
-          var pureTranslated = duplicateTrack(selected, requestUrl, "translate", config, platform);
-          if (pureTranslated) { output.push(pureTranslated); injected += 1; }
-        }
-        return;
-      }
-      output.push(line);
-      var bilingual = duplicateTrack(selected, requestUrl, "bilingual", config, platform);
-      if (bilingual) { output.push(bilingual); injected += 1; }
-      if (config.injectTranslated) {
-        var translated = duplicateTrack(selected, requestUrl, "translate", config, platform);
-        if (translated) { output.push(translated); injected += 1; }
-      }
-    });
-    logger.info("master manifest inspected", {
-      platform: platform ? platform.id : "unknown",
-      injected: injected,
-      trackName: config.trackName,
-      selectedName: selected.name,
-      selectedLanguage: selected.language || "auto",
-      configuredSource: config.source,
-      strategy: replaceSource ? "replace-source" : "duplicate"
-    });
-    return injected ? output.join("\n") : body;
-  }
-
-  function decorateSubtitlePlaylist(body, originUrl, mode, source, target, config, logger, platform) {
-    if (!body || body.indexOf("#EXTM3U") < 0) return body;
-    var changed = 0;
-    var maxByteRangeVtt = platform === "max"
-      && /#EXT-X-BYTERANGE:/i.test(body)
-      && /\.vtt(?:[?#]|["']|$)/i.test(body);
-    var output = body.replace(/\r\n/g, "\n").split("\n").map(function (line) {
-      var trimmed = line.trim();
-      // Max commonly exposes each WebVTT object as an 8-byte EXT-X-MAP
-      // ("WEBVTT\nX") followed by a byte range beginning at byte 8. A virtual
-      // translated response has a different length, so retaining those byte
-      // ranges makes AVPlayer truncate the rewritten VTT and remove the
-      // selected subtitle rendition. Each numbered .vtt object is already a
-      // complete standalone WebVTT file; request it whole through the gateway.
-      if (maxByteRangeVtt && (/^#EXT-X-BYTERANGE:/i.test(trimmed)
-        || /^#EXT-X-MAP:.*\bURI=["'][^"']*\.vtt(?:[?#][^"']*)?["']/i.test(trimmed))) {
-        changed += 1;
-        return "";
-      }
-      if (!trimmed || trimmed[0] === "#") return line;
-      changed += 1;
-      var virtualParams = {
-        origin: GSS.Url.resolve(originUrl, trimmed),
-        mode: mode,
-        source: source,
-        target: target,
-        platform: platform || "unknown",
-        version: GSS.VERSION
+  function register(id, meta, factory) { registry[id] = { id: id, meta: meta || {}, factory: factory }; }
+  function list() {
+    return Object.keys(registry).map(function (id) {
+      var item = registry[id];
+      return {
+        id: id, name: item.meta.name || id, kind: item.meta.kind || "api",
+        requiresKey: !!item.meta.requiresKey, configured: !item.meta.requiresKey || GSS.providerHasKey(id),
+        experimental: !!item.meta.experimental
       };
-      if (maxByteRangeVtt) virtualParams.full = "1";
-      return GSS.Url.virtual(config.virtualOrigin, "/subtitle", virtualParams);
     });
-    logger.info("subtitle playlist virtualized", { segments: changed, mode: mode, platform: platform || "unknown" });
-    return changed ? output.join("\n") : body;
+  }
+  function create(id, config, logger) {
+    var item = registry[id];
+    if (!item) throw new Error("Unknown provider: " + id);
+    return item.factory(config, logger, {
+      apiKey: GSS.getProviderSecret(id, "apiKey"),
+      extra: GSS.getProviderSecret(id, "extra")
+    });
+  }
+  function providerChain(config) {
+    var chain = [String(config.provider || "google-free")];
+    String(config.fallbackProviders || "").split(/[,|]/).forEach(function (id) {
+      id = id.trim(); if (id && chain.indexOf(id) < 0) chain.push(id);
+    });
+    return chain;
+  }
+  function translateMany(texts, source, target, config, logger, callback) {
+    var chain = providerChain(config), index = 0, errors = [];
+    function next() {
+      if (index >= chain.length) { callback(new Error("All translation providers failed: " + errors.join(" | "))); return; }
+      var id = chain[index++], provider;
+      try { provider = create(id, config, logger); }
+      catch (error) { errors.push(id + ": " + String(error)); next(); return; }
+      if (provider.ready && !provider.ready()) { errors.push(id + ": not configured"); next(); return; }
+      logger.info("translation provider selected", { provider: id, items: texts.length });
+      provider.translateMany(texts, source, target, function (error, output) {
+        if (!error && output && output.length === texts.length) { callback(null, output, id); return; }
+        errors.push(id + ": " + String(error || "invalid result"));
+        logger.warn("translation provider failed", { provider: id, error: String(error || "invalid result") });
+        next();
+      });
+    }
+    next();
   }
 
-  function absolutizeUris(body, originUrl) {
-    if (!body || body.indexOf("#EXTM3U") < 0) return body;
-    function absolute(value) {
-      value = String(value || "");
-      if (!value || /^[a-z][a-z0-9+.-]*:/i.test(value)) return value;
-      return GSS.Url.resolve(originUrl, value);
-    }
-    return body.replace(/\r\n/g, "\n").split("\n").map(function (line) {
-      var trimmed = line.trim();
-      if (!trimmed) return line;
-      if (trimmed[0] !== "#") {
-        var start = line.indexOf(trimmed);
-        return line.slice(0, start) + absolute(trimmed) + line.slice(start + trimmed.length);
-      }
-      return line.replace(/(\bURI=)(?:"([^"]*)"|'([^']*)'|([^,\s]*))/ig, function (match, prefix, doubleQuoted, singleQuoted, bare) {
-        var value = doubleQuoted !== undefined ? doubleQuoted : (singleQuoted !== undefined ? singleQuoted : bare);
-        var resolved = absolute(value);
-        if (doubleQuoted !== undefined) return prefix + '"' + resolved + '"';
-        if (singleQuoted !== undefined) return prefix + "'" + resolved + "'";
-        return prefix + resolved;
-      });
-    }).join("\n");
+  function jsonBody(value) { return JSON.stringify(value); }
+  function postJson(url, headers, value, callback) {
+    headers = headers || {}; headers["Content-Type"] = "application/json; charset=utf-8";
+    GSS.Runtime.httpPost({ url: url, headers: headers, body: jsonBody(value) }, callback);
+  }
+  function parseJson(body) { return JSON.parse(String(body || "")); }
+  function getPath(value, path) {
+    var current = value;
+    String(path || "").split(".").forEach(function (part) { if (part && current !== undefined && current !== null) current = current[part]; });
+    return current;
+  }
+  function decodeHtml(text) {
+    return String(text || "").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
+  }
+  function llmPrompt(texts, source, target, instruction) {
+    return (instruction || "Translate the subtitles naturally.") + "\nSource language: " + source + "\nTarget language: " + target
+      + "\nReturn ONLY valid JSON in this exact shape: {\"translations\":[\"...\"]}. Preserve item count and order.\nINPUT:\n"
+      + JSON.stringify(texts);
+  }
+  function parseLlmText(text, count) {
+    text = String(text || "").trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+    var parsed = JSON.parse(text), values = Array.isArray(parsed) ? parsed : parsed.translations;
+    if (!Array.isArray(values) || values.length !== count) throw new Error("LLM returned an invalid translation array");
+    return values.map(function (item) { return String(item); });
   }
 
   return {
-    parseAttributes: parseAttributes,
-    chooseSourceTrack: chooseSourceTrack,
-    inspectTrackTypes: inspectTrackTypes,
-    isMediaPlaylist: isMediaPlaylist,
-    isDirectSubtitlePlaylist: isDirectSubtitlePlaylist,
-    injectTracks: injectTracks,
-    decorateSubtitlePlaylist: decorateSubtitlePlaylist,
-    absolutizeUris: absolutizeUris
+    register: register, list: list, create: create, translateMany: translateMany,
+    postJson: postJson, parseJson: parseJson, getPath: getPath, decodeHtml: decodeHtml,
+    llmPrompt: llmPrompt, parseLlmText: parseLlmText
   };
 })();
 
-GSS.MPD = (function createMpdTools() {
-  function attr(tag, name) {
-    var match = String(tag || "").match(new RegExp("\\b" + name + "\\s*=\\s*([\\\"'])(.*?)\\1", "i"));
-    return match ? match[2] : "";
-  }
+GSS.Providers.register("google-free", { name: "Google 免费兼容接口", kind: "free", requiresKey: false, experimental: true }, function (config, logger) {
+  var endpoints = [
+    "https://translate.googleapis.com/translate_a/single",
+    "https://translate.google.com/translate_a/single"
+  ];
 
-  function setAttr(tag, name, value) {
-    var regex = new RegExp("(\\b" + name + "\\s*=\\s*)([\\\"']).*?\\2", "i");
-    if (regex.test(tag)) return tag.replace(regex, "$1\"" + String(value).replace(/\"/g, "") + "\"");
-    return tag.replace(/>$/, " " + name + "=\"" + String(value).replace(/\"/g, "") + "\">");
-  }
-
-  function textLike(startTag, block) {
-    var mime = (attr(startTag, "mimeType") || attr(block, "mimeType") || "").toLowerCase();
-    var contentType = (attr(startTag, "contentType") || "").toLowerCase();
-    var codecs = (attr(startTag, "codecs") || attr(block, "codecs") || "").toLowerCase();
-    return contentType === "text" || /text\/(vtt|plain)|application\/(ttml\+xml|xml)/.test(mime) || /(wvtt|stpp|ttml)/.test(codecs);
-  }
-
-  function score(startTag, block, config) {
-    var language = attr(startTag, "lang") || attr(block, "lang");
-    var labelMatch = block.match(/<Label\b[^>]*>([\s\S]*?)<\/Label>/i);
-    var label = labelMatch ? GSS.Formats.stripTags(labelMatch[1]) : "";
-    if (!GSS.Language.matches(language, label, config.source)) return -10000;
-    var value = GSS.Language.priority(language, label, config.sourcePriority);
-    if (/forced/i.test(block)) value -= 100;
-    if (/caption|sdh|description/i.test(label)) value -= 8;
-    if (/selectionPriority\s*=\s*["']1["']/i.test(startTag)) value += 20;
-    return value;
-  }
-
-  function duplicate(block, requestUrl, config, platform) {
-    var startMatch = block.match(/^<AdaptationSet\b[^>]*>/i);
-    if (!startMatch) return null;
-    var baseMatch = block.match(/<BaseURL\b[^>]*>([\s\S]*?)<\/BaseURL>/i);
-    if (!baseMatch) return null;
-    if (/<SegmentTemplate\b|<SegmentList\b|<SegmentBase\b/i.test(block)) return null;
-    var language = attr(startMatch[0], "lang") || "auto";
-    var origin = GSS.Url.resolve(requestUrl, GSS.Formats.stripTags(baseMatch[1]));
-    var virtual = GSS.Url.virtual(config.virtualOrigin, "/subtitle", {
-      origin: origin,
-      mode: "bilingual",
-      source: GSS.Language.googleSource(language, config.source),
-      target: config.target,
-      platform: platform ? platform.id : "unknown",
-      version: GSS.VERSION
-    });
-    var startTag = setAttr(startMatch[0], "id", "gss-" + GSS.Hash(origin).slice(0, 8));
-    startTag = setAttr(startTag, "lang", config.target);
-    var output = block.replace(startMatch[0], startTag).replace(baseMatch[0], "<BaseURL>" + GSS.Formats.escapeXml(virtual) + "</BaseURL>");
-    if (/<Label\b/i.test(output)) output = output.replace(/<Label\b[^>]*>[\s\S]*?<\/Label>/i, "<Label>" + GSS.Formats.escapeXml(config.trackName) + "</Label>");
-    else output = output.replace(startTag, startTag + "<Label>" + GSS.Formats.escapeXml(config.trackName) + "</Label>");
+  function parseResponse(body) {
+    var data = JSON.parse(body);
+    var output = "";
+    if (!data || !Array.isArray(data[0])) throw new Error("Unexpected Google response");
+    data[0].forEach(function (part) { if (part && typeof part[0] === "string") output += part[0]; });
     return output;
   }
 
-  function virtualize(block, requestUrl, config, platform) {
-    var startMatch = block.match(/^<AdaptationSet\b[^>]*>/i);
-    var baseMatch = block.match(/<BaseURL\b[^>]*>([\s\S]*?)<\/BaseURL>/i);
-    if (!startMatch || !baseMatch || /<SegmentTemplate\b|<SegmentList\b|<SegmentBase\b/i.test(block)) return null;
-    var language = attr(startMatch[0], "lang") || "auto";
-    var origin = GSS.Url.resolve(requestUrl, GSS.Formats.stripTags(baseMatch[1]));
-    var virtual = GSS.Url.virtual(config.virtualOrigin, "/subtitle", {
-      origin: origin,
-      mode: "bilingual",
-      source: GSS.Language.googleSource(language, config.source),
-      target: config.target,
-      platform: platform ? platform.id : "unknown",
-      strategy: "replace-source",
-      version: GSS.VERSION
+  function requestText(text, source, target, callback, endpointIndex) {
+    endpointIndex = endpointIndex || 0;
+    if (endpointIndex >= endpoints.length) { callback(new Error("All Google Translate compatibility endpoints failed")); return; }
+    var url = endpoints[endpointIndex]
+      + "?client=gtx&dt=t"
+      + "&sl=" + encodeURIComponent(source || "auto")
+      + "&tl=" + encodeURIComponent(target)
+      + "&q=" + encodeURIComponent(text);
+    GSS.Runtime.httpGet(url, function (error, body) {
+      if (error) {
+        logger.warn("translation endpoint failed", { endpoint: endpoints[endpointIndex], error: String(error) });
+        requestText(text, source, target, callback, endpointIndex + 1);
+        return;
+      }
+      try { callback(null, parseResponse(body)); }
+      catch (parseError) {
+        logger.warn("translation response parse failed", { endpoint: endpoints[endpointIndex], error: String(parseError) });
+        requestText(text, source, target, callback, endpointIndex + 1);
+      }
     });
-    return block.replace(baseMatch[0], "<BaseURL>" + GSS.Formats.escapeXml(virtual) + "</BaseURL>");
   }
 
-  function injectTrack(body, requestUrl, config, logger, platform) {
-    if (!config.enabled || !/<MPD\b/i.test(String(body || "")) || /(?:gss\.local|example\.com)\/subtitle/.test(String(body))) return body;
-    var regex = /<AdaptationSet\b[^>]*>[\s\S]*?<\/AdaptationSet>/gi, match, best = null;
-    while ((match = regex.exec(body))) {
-      var startTag = (match[0].match(/^<AdaptationSet\b[^>]*>/i) || [""])[0];
-      if (!textLike(startTag, match[0])) continue;
-      var currentScore = score(startTag, match[0], config);
-      if (currentScore < -1000) continue;
-      if (!best || currentScore > best.score) best = { block: match[0], start: match.index, end: regex.lastIndex, score: currentScore };
+  function translateSingles(texts, source, target, callback) {
+    var result = new Array(texts.length);
+    var index = 0;
+    function next() {
+      if (index >= texts.length) { callback(null, result); return; }
+      var current = index;
+      requestText(texts[current], source, target, function (error, translated) {
+        if (error) { callback(error); return; }
+        result[current] = translated;
+        index += 1;
+        next();
+      });
     }
-    if (!best) {
-      logger.info("DASH manifest inspected", { platform: platform ? platform.id : "unknown", injected: 0, reason: "no matching text adaptation" });
-      return body;
-    }
-    var replaceSource = GSS.Platforms.useSourceReplacement(platform, config);
-    var rewritten = replaceSource
-      ? virtualize(best.block, requestUrl, config, platform)
-      : duplicate(best.block, requestUrl, config, platform);
-    if (!rewritten) {
-      logger.info("DASH manifest inspected", { platform: platform ? platform.id : "unknown", injected: 0, reason: "segmented or unsupported text adaptation" });
-      return body;
-    }
-    logger.info("DASH manifest inspected", {
-      platform: platform ? platform.id : "unknown",
-      injected: 1,
-      trackName: config.trackName,
-      strategy: replaceSource ? "replace-source" : "duplicate"
-    });
-    if (replaceSource) return body.slice(0, best.start) + rewritten + body.slice(best.end);
-    return body.slice(0, best.end) + rewritten + body.slice(best.end);
+    next();
   }
 
-  return { injectTrack: injectTrack };
-})();
+  function parseMarkedTranslation(translated, count) {
+    var output = new Array(count);
+    var regex = /\[\[GSS_(\d{4})\]\]\s*([\s\S]*?)(?=\[\[GSS_\d{4}\]\]|$)/g;
+    var match;
+    while ((match = regex.exec(translated))) {
+      var index = Number(match[1]);
+      if (index >= 0 && index < count) output[index] = match[2].trim();
+    }
+    for (var i = 0; i < count; i += 1) if (typeof output[i] !== "string") return null;
+    return output;
+  }
 
-(function manifestEntry() {
+  function translateBatch(batch, source, target, callback) {
+    if (batch.length === 1) {
+      requestText(batch[0], source, target, function (error, text) { callback(error, error ? null : [text]); });
+      return;
+    }
+    var marked = batch.map(function (text, index) {
+      var padded = ("0000" + String(index)).slice(-4);
+      return "[[GSS_" + padded + "]]\n" + text;
+    }).join("\n");
+    requestText(marked, source, target, function (error, translated) {
+      if (error) { callback(error); return; }
+      var parsed = parseMarkedTranslation(translated, batch.length);
+      if (parsed) { callback(null, parsed); return; }
+      logger.warn("batch markers changed; falling back to individual requests", { items: batch.length });
+      translateSingles(batch, source, target, callback);
+    });
+  }
+
+  function makeBatches(texts) {
+    var batches = [], current = [], currentChars = 0;
+    texts.forEach(function (text) {
+      var size = String(text).length + 24;
+      if (current.length && (current.length >= config.batchItems || currentChars + size > config.batchChars)) {
+        batches.push(current); current = []; currentChars = 0;
+      }
+      current.push(text); currentChars += size;
+    });
+    if (current.length) batches.push(current);
+    return batches;
+  }
+
+  function translateMany(texts, source, target, callback) {
+    if (!texts.length) { callback(null, []); return; }
+    var batches = makeBatches(texts), output = new Array(batches.length), nextIndex = 0, completed = 0, stopped = false;
+    var concurrency = Math.max(1, Math.min(Number(config.translationConcurrency || 2), batches.length));
+    logger.info("translation started", { cues: texts.length, batches: batches.length, concurrency: concurrency, source: source, target: target });
+    function worker() {
+      if (stopped || nextIndex >= batches.length) return;
+      var current = nextIndex++;
+      translateBatch(batches[current], source, target, function (error, translated) {
+        if (stopped) return;
+        if (error) { stopped = true; callback(error); return; }
+        output[current] = translated;
+        completed += 1;
+        if (completed >= batches.length) {
+          var flattened = [];
+          output.forEach(function (batch) { flattened = flattened.concat(batch); });
+          callback(null, flattened);
+          return;
+        }
+        worker();
+      });
+    }
+    for (var i = 0; i < concurrency; i += 1) worker();
+  }
+
+  return { ready: function () { return true; }, translateMany: translateMany };
+});
+
+GSS.Providers.register("google-cloud", { name: "Google Cloud Translation v2", kind: "api", requiresKey: true }, function (config, logger, secrets) {
+  function translateMany(texts, source, target, callback) {
+    var endpoint = config.providerEndpoint || "https://translation.googleapis.com/language/translate/v2";
+    var url = endpoint + (endpoint.indexOf("?") >= 0 ? "&" : "?") + "key=" + encodeURIComponent(secrets.apiKey);
+    var body = { q: texts, target: target, format: "text" };
+    if (source && source !== "auto") body.source = source;
+    GSS.Providers.postJson(url, {}, body, function (error, raw) {
+      if (error) { callback(error); return; }
+      try {
+        var data = GSS.Providers.parseJson(raw), rows = data.data && data.data.translations;
+        if (!Array.isArray(rows)) throw new Error("Invalid Google Cloud response");
+        callback(null, rows.map(function (row) { return GSS.Providers.decodeHtml(row.translatedText); }));
+      } catch (parseError) { callback(parseError); }
+    });
+  }
+  return { ready: function () { return !!secrets.apiKey; }, translateMany: translateMany };
+});
+
+GSS.Providers.register("deepl", { name: "DeepL API", kind: "api", requiresKey: true }, function (config, logger, secrets) {
+  function lang(value) { return String(value || "").replace(/^zh-cn$/i, "ZH-HANS").replace(/^zh-tw$/i, "ZH-HANT").toUpperCase(); }
+  function translateMany(texts, source, target, callback) {
+    var endpoint = config.providerEndpoint || "https://api-free.deepl.com/v2/translate";
+    var body = { text: texts, target_lang: lang(target), preserve_formatting: true };
+    if (source && source !== "auto") body.source_lang = lang(source);
+    if (config.providerModel) body.model_type = config.providerModel;
+    GSS.Providers.postJson(endpoint, { Authorization: "DeepL-Auth-Key " + secrets.apiKey }, body, function (error, raw) {
+      if (error) { callback(error); return; }
+      try {
+        var rows = GSS.Providers.parseJson(raw).translations;
+        if (!Array.isArray(rows)) throw new Error("Invalid DeepL response");
+        callback(null, rows.map(function (row) { return String(row.text || ""); }));
+      } catch (parseError) { callback(parseError); }
+    });
+  }
+  return { ready: function () { return !!secrets.apiKey; }, translateMany: translateMany };
+});
+
+GSS.Providers.register("azure", { name: "Azure Translator v3", kind: "api", requiresKey: true }, function (config, logger, secrets) {
+  function translateMany(texts, source, target, callback) {
+    var endpoint = (config.providerEndpoint || "https://api.cognitive.microsofttranslator.com").replace(/\/$/, "");
+    var url = endpoint + "/translate?api-version=3.0&to=" + encodeURIComponent(target);
+    if (source && source !== "auto") url += "&from=" + encodeURIComponent(source);
+    var headers = { "Ocp-Apim-Subscription-Key": secrets.apiKey };
+    if (config.providerRegion) headers["Ocp-Apim-Subscription-Region"] = config.providerRegion;
+    GSS.Providers.postJson(url, headers, texts.map(function (text) { return { Text: text }; }), function (error, raw) {
+      if (error) { callback(error); return; }
+      try {
+        var rows = GSS.Providers.parseJson(raw);
+        callback(null, rows.map(function (row) { return String(row.translations[0].text || ""); }));
+      } catch (parseError) { callback(parseError); }
+    });
+  }
+  return { ready: function () { return !!secrets.apiKey; }, translateMany: translateMany };
+});
+
+GSS.Providers.register("libretranslate", { name: "LibreTranslate / 自建实例", kind: "api", requiresKey: false }, function (config, logger, secrets) {
+  function translateMany(texts, source, target, callback) {
+    var endpoint = (config.providerEndpoint || "https://libretranslate.com").replace(/\/$/, "") + "/translate";
+    var body = { q: texts, source: source || "auto", target: target, format: "text" };
+    if (secrets.apiKey) body.api_key = secrets.apiKey;
+    GSS.Providers.postJson(endpoint, {}, body, function (error, raw) {
+      if (error) { callback(error); return; }
+      try {
+        var data = GSS.Providers.parseJson(raw), value = data.translatedText;
+        callback(null, Array.isArray(value) ? value.map(String) : [String(value || "")]);
+      } catch (parseError) { callback(parseError); }
+    });
+  }
+  return { ready: function () { return !!config.providerEndpoint; }, translateMany: translateMany };
+});
+
+GSS.Providers.register("openai", { name: "OpenAI Responses API", kind: "llm", requiresKey: true }, function (config, logger, secrets) {
+  function extract(data) {
+    if (data.output_text) return data.output_text;
+    var text = "";
+    (data.output || []).forEach(function (item) { (item.content || []).forEach(function (part) { if (part.text) text += part.text; }); });
+    return text;
+  }
+  function translateMany(texts, source, target, callback) {
+    var endpoint = config.providerEndpoint || "https://api.openai.com/v1/responses";
+    var model = config.providerModel;
+    if (!model) { callback(new Error("OpenAI model is empty")); return; }
+    var body = { model: model, input: GSS.Providers.llmPrompt(texts, source, target, config.providerPrompt) };
+    GSS.Providers.postJson(endpoint, { Authorization: "Bearer " + secrets.apiKey }, body, function (error, raw) {
+      if (error) { callback(error); return; }
+      try { callback(null, GSS.Providers.parseLlmText(extract(GSS.Providers.parseJson(raw)), texts.length)); }
+      catch (parseError) { callback(parseError); }
+    });
+  }
+  return { ready: function () { return !!secrets.apiKey && !!config.providerModel; }, translateMany: translateMany };
+});
+
+GSS.Providers.register("openai-compatible", { name: "OpenAI 兼容接口（DeepSeek 等）", kind: "llm", requiresKey: true }, function (config, logger, secrets) {
+  function translateMany(texts, source, target, callback) {
+    if (!config.providerModel) { callback(new Error("Compatible API model is empty")); return; }
+    if (String(config.providerModel).toLowerCase() === "hy-mt2-1.8b") {
+      var inputChars = JSON.stringify(texts || []).length;
+      if (texts.length > 3 || inputChars > 480) {
+        callback(new Error("Hy-MT2 low-context profile skipped a large subtitle batch (items=" + texts.length + ", chars=" + inputChars + ", limits=3/480)"));
+        return;
+      }
+    }
+    var base = (config.providerEndpoint || "https://api.deepseek.com").replace(/\/$/, "");
+    var endpoint = /\/chat\/completions$/.test(base) ? base : base + "/chat/completions";
+    var body = {
+      model: config.providerModel,
+      messages: [
+        { role: "system", content: "You are a professional subtitle translator. Output valid JSON only." },
+        { role: "user", content: GSS.Providers.llmPrompt(texts, source, target, config.providerPrompt) }
+      ],
+      temperature: 0.1,
+      response_format: { type: "json_object" }
+    };
+    GSS.Providers.postJson(endpoint, { Authorization: "Bearer " + secrets.apiKey }, body, function (error, raw) {
+      if (error) { callback(error); return; }
+      try {
+        var data = GSS.Providers.parseJson(raw), text = data.choices[0].message.content;
+        callback(null, GSS.Providers.parseLlmText(text, texts.length));
+      } catch (parseError) { callback(parseError); }
+    });
+  }
+  return { ready: function () { return !!secrets.apiKey && !!config.providerEndpoint && !!config.providerModel; }, translateMany: translateMany };
+});
+
+GSS.Providers.register("gemini", { name: "Google Gemini API", kind: "llm", requiresKey: true }, function (config, logger, secrets) {
+  function translateMany(texts, source, target, callback) {
+    var model = config.providerModel;
+    if (!model) { callback(new Error("Gemini model is empty")); return; }
+    var endpoint = config.providerEndpoint || ("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent");
+    var url = endpoint + (endpoint.indexOf("?") >= 0 ? "&" : "?") + "key=" + encodeURIComponent(secrets.apiKey);
+    var body = { contents: [{ parts: [{ text: GSS.Providers.llmPrompt(texts, source, target, config.providerPrompt) }] }], generationConfig: { temperature: 0.1, responseMimeType: "application/json" } };
+    GSS.Providers.postJson(url, {}, body, function (error, raw) {
+      if (error) { callback(error); return; }
+      try {
+        var data = GSS.Providers.parseJson(raw), text = data.candidates[0].content.parts[0].text;
+        callback(null, GSS.Providers.parseLlmText(text, texts.length));
+      } catch (parseError) { callback(parseError); }
+    });
+  }
+  return { ready: function () { return !!secrets.apiKey && !!config.providerModel; }, translateMany: translateMany };
+});
+
+GSS.Providers.register("custom-json", { name: "自定义 JSON API", kind: "custom", requiresKey: false, experimental: true }, function (config, logger, secrets) {
+  function translateMany(texts, source, target, callback) {
+    if (!config.providerEndpoint) { callback(new Error("Custom endpoint is empty")); return; }
+    var headers = {};
+    if (secrets.apiKey) headers.Authorization = "Bearer " + secrets.apiKey;
+    GSS.Providers.postJson(config.providerEndpoint, headers, { texts: texts, source: source, target: target }, function (error, raw) {
+      if (error) { callback(error); return; }
+      try {
+        var data = GSS.Providers.parseJson(raw), value = data.translations || data.translatedText || data.output;
+        if (!Array.isArray(value)) throw new Error("Expected translations array");
+        callback(null, value.map(String));
+      } catch (parseError) { callback(parseError); }
+    });
+  }
+  return { ready: function () { return !!config.providerEndpoint; }, translateMany: translateMany };
+});
+
+GSS.Subtitle = {
+  translateBody: function translateBody(body, url, contentType, mode, source, target, config, logger, callback) {
+    var format = GSS.Formats.detect(body, url, contentType, config);
+    if (!format) { callback(new Error("Unsupported subtitle format")); return; }
+    var cache = GSS.Cache(config, logger);
+    // Rendered subtitle output depends on parser behavior. Including the module
+    // version prevents a fixed release from reusing malformed output cached by
+    // an older renderer.
+    var seed = GSS.VERSION + "|" + body + "|" + format.id + "|" + mode + "|" + source + "|" + target + "|" + config.bilingualOrder + "|" + config.provider + "|" + config.fallbackProviders;
+    var cached = cache.get(seed);
+    if (cached !== null) { callback(null, cached, true, format); return; }
+    var parsed;
+    try { parsed = format.parse(body); } catch (error) { callback(error); return; }
+    var texts = GSS.Formats.uniqueTexts(parsed.cues || []);
+    if (!texts.length) { callback(null, body, false, format); return; }
+    GSS.Providers.translateMany(texts, source, target, config, logger, function (error, translations, providerId) {
+      if (error) { callback(error); return; }
+      try {
+        var output = format.render(parsed, translations, mode, config.bilingualOrder);
+        cache.set(seed, output);
+        logger.info("subtitle translated", { format: format.id, provider: providerId, mode: mode, uniqueCues: texts.length, source: source, target: target });
+        callback(null, output, true, format);
+      } catch (renderError) { callback(renderError); }
+    });
+  }
+};
+
+(function directSubtitleEntry() {
   var config = GSS.getConfig();
-  var logger = GSS.Logger(config, "manifest");
+  var logger = GSS.Logger(config, "direct-subtitle");
   var requestId = GSS.Diagnostics ? GSS.Diagnostics.requestId() : "";
+  var requestUrl = GSS.Runtime.request.url || "";
+  var headers = GSS.Runtime.request.headers || {};
+  var userAgent = String(headers["User-Agent"] || headers["user-agent"] || "");
+  var platform = GSS.Platforms.detect(requestUrl, config);
 
-  function record(platform, type, changed, details, status, level) {
+  function trace(status, details, level) {
     if (!config.logEnabled || !GSS.Diagnostics) return;
     GSS.Diagnostics.record({
       requestId: requestId,
-      scope: "manifest",
-      url: GSS.Runtime.request.url || "",
-      platform: platform ? platform.id : "unknown",
-      type: type,
+      scope: "direct-subtitle",
+      platform: "paramount",
+      type: "direct-subtitle-translation",
       level: level || "info",
-      status: status || (changed ? "rewritten" : "unchanged"),
-      group: type === "hls-media" ? (platform ? platform.id : "unknown") + "|hls-media" : "",
-      throttleSeconds: type === "hls-media" ? 30 : 0,
-      changed: !!changed,
+      status: status,
+      url: requestUrl,
       details: details || {}
     });
   }
 
   try {
-    var body = GSS.Runtime.response.body || "";
-    if (!config.enabled) { record(null, "module-disabled", false, {}, "bypassed"); GSS.Runtime.passThrough(); return; }
-    var requestUrl = GSS.Runtime.request.url || "";
-    var platform = GSS.Platforms.detect(requestUrl, config);
-    if (!platform) { record(null, "platform-unmatched", false, {}, "bypassed"); GSS.Runtime.passThrough(); return; }
-    if (!GSS.Platforms.enabled(platform, config)) { record(platform, "platform-disabled", false, {}, "bypassed"); GSS.Runtime.passThrough(); return; }
-    var processingMode = "full";
-    var paramountPlaybackMetadata = /^(?:paramount|paramount-live)$/.test(platform.id)
-      && /\/apps-api\/v\d+(?:\.\d+)*\/(?:iphone|ipad|ios|appletv|tvos|appletvtvos)\/(?:video\/cid\/[^\/?#]+|dynamicplay\/(?:show|movie)\/[^\/?#]+|content\/playability)\.json$/i.test(GSS.Url.path(requestUrl));
-    var paramountSessionMetadata = /^(?:paramount|paramount-live)$/.test(platform.id)
-      && /\/apps-api\/v\d+(?:\.\d+)*\/(?:iphone|ipad|ios|appletv|tvos|appletvtvos)\/irdeto-control\/session-token\.json$/i.test(GSS.Url.path(requestUrl));
-    var paramountTvOSMetadata = /^(?:paramount|paramount-live)$/.test(platform.id)
-      && /\/apps-api\/v\d+(?:\.\d+)*\/appletvtvos\//i.test(GSS.Url.path(requestUrl));
-    var paramountMetadataPath = GSS.Url.path(requestUrl);
-    var paramountMetadataEndpoint = /\/content\/playability\.json$/i.test(paramountMetadataPath) ? "content/playability"
-      : /\/dynamicplay\//i.test(paramountMetadataPath) ? "dynamicplay" : "video/cid";
-    if (platform.id === "discovery") processingMode = String(config.discoveryMode || "full");
-    else if (config.safePlayback && (paramountPlaybackMetadata || paramountSessionMetadata)) processingMode = "full";
-    else if (config.safePlayback && /^(max|pluto|prime|hulu)$/.test(platform.id)) processingMode = "hls-only";
-    else if (config.safePlayback) processingMode = "hls-only";
-    if (processingMode === "off") { record(platform, "adapter-off", false, { processingMode: processingMode }, "bypassed"); GSS.Runtime.passThrough(); return; }
-    var output = body;
-    var contentType = "";
-
-    if (body.indexOf("#EXTM3U") >= 0) {
-      var media = GSS.M3U8.isMediaPlaylist(body);
-      var summary = GSS.M3U8.inspectTrackTypes(body.replace(/\r\n/g, "\n").split("\n"));
-      var directSubtitlePlaylist = media && GSS.M3U8.isDirectSubtitlePlaylist(requestUrl, platform);
-      if (directSubtitlePlaylist) {
-        output = GSS.M3U8.decorateSubtitlePlaylist(
-          body,
-          requestUrl,
-          "bilingual",
-          GSS.Language.googleSource("", config.source),
-          config.target,
-          config,
-          logger,
-          platform.id
-        );
-        summary.directSubtitlePlaylist = true;
-        summary.virtualizedSegments = output === body ? 0 : (output.match(/(?:gss\.local|example\.com)\/subtitle/g) || []).length;
-      } else {
-        output = GSS.M3U8.injectTracks(body, requestUrl, config, logger, platform);
-      }
-      if (output !== body) {
-        var outputSummary = GSS.M3U8.inspectTrackTypes(output.replace(/\r\n/g, "\n").split("\n"));
-        summary.outputSubtitles = outputSummary.subtitles;
-        summary.outputVirtualSubtitleUris = outputSummary.virtualSubtitleUris;
-        summary.outputRenditions = outputSummary.renditions;
-        summary.strategy = (platform.id === "max" && config.maxReplaceSource)
-          || (/^(?:paramount|paramount-live)$/.test(platform.id) && config.paramountReplaceSource)
-          || GSS.Platforms.useSourceReplacement(platform, config)
-          ? "replace-source" : "duplicate";
-      }
-      contentType = "application/vnd.apple.mpegurl; charset=utf-8";
-      record(platform, directSubtitlePlaylist ? "hls-subtitle" : (media ? "hls-media" : "hls-master"), output !== body, summary, output !== body ? "rewritten" : "unchanged");
-    } else if (processingMode === "hls-only") {
-      record(platform, "safe-playback-bypass", false, { responseKind: /<MPD\b/i.test(body) ? "dash" : /^\s*[\[{]/.test(body) ? "json" : "unknown" }, "bypassed");
-      GSS.Runtime.passThrough(); return;
-    } else if (/<MPD\b/i.test(body)) {
-      output = GSS.MPD.injectTrack(body, requestUrl, config, logger, platform);
-      contentType = "application/dash+xml; charset=utf-8";
-      record(platform, "dash", output !== body, { strategy: GSS.Platforms.useSourceReplacement(platform, config) ? "replace-source" : "duplicate" });
-    } else if (/^\s*[\[{]/.test(body) && /^(max|discovery|paramount|paramount-live)$/.test(platform.id)) {
-      // The current Paramount tvOS client obtains the original WebVTT media
-      // even after a response script changes streamingUrl, and never requests
-      // the synthetic master. Preserve its playback JSON and let the dedicated
-      // AppleCoreMedia WebVTT response fallback translate the selected source
-      // track in place. Mobile Apple clients keep the proven JSON adaptation.
-      var jsonResult = paramountTvOSMetadata
-        ? { body: body, changed: false, summary: { reason: "tvOS direct WebVTT fallback", nodesVisited: 0 } }
-        : paramountSessionMetadata
-          ? GSS.PlaybackJson.proxyParamountManifests(body, config, logger, platform, "session-token")
-          : paramountPlaybackMetadata
-            ? GSS.PlaybackJson.adaptParamountPlayback(body, requestUrl, config, logger, platform, paramountMetadataEndpoint)
-            : GSS.PlaybackJson.inject(body, requestUrl, config, logger, platform);
-      output = jsonResult.body;
-      contentType = "application/json; charset=utf-8";
-      if (paramountPlaybackMetadata && !paramountTvOSMetadata && !jsonResult.changed) {
-        logger.warn("Paramount playback metadata exposed no supported text track", {
-          endpoint: paramountMetadataEndpoint,
-          reason: jsonResult.summary && jsonResult.summary.reason || "unchanged",
-          arrays: jsonResult.summary && jsonResult.summary.arraysInspected || 0,
-          textTracks: jsonResult.summary && jsonResult.summary.textTracks || 0,
-          nodesVisited: jsonResult.summary && jsonResult.summary.nodesVisited || 0
-        });
-      }
-      record(platform, paramountSessionMetadata ? "paramount-session-json" : "playback-json", jsonResult.changed, jsonResult.summary);
-    } else {
-      record(platform, "unsupported-response", false, { bodySize: String(body).length }, "bypassed", "warn");
-      GSS.Runtime.passThrough(); return;
+    // This is a tvOS-only fallback. Paramount iPhone/iPad already consume the
+    // translated rendition injected into their playback metadata, while the
+    // tvOS AVPlayer can reuse an original master and skip that rewritten URL.
+    if (!config.enabled || !platform || !/^(?:paramount|paramount-live)$/.test(platform.id)
+      || !GSS.Platforms.enabled(platform, config) || !/(?:Apple TV|AppleTV|tvOS)/i.test(userAgent)) {
+      GSS.Runtime.passThrough();
+      return;
     }
-    if (output === body) GSS.Runtime.passThrough();
-    else GSS.Runtime.doneBody(output, GSS.Runtime.response.headers, contentType);
+    var body = String(GSS.Runtime.response.body || "");
+    var originalValidation = GSS.VTT.validate(body);
+    if (!originalValidation.valid || !originalValidation.cueCount) {
+      trace("bypassed", {
+        reason: originalValidation.valid ? "empty WebVTT segment" : "invalid WebVTT response",
+        inputCues: originalValidation.cueCount
+      }, originalValidation.valid ? "info" : "warn");
+      GSS.Runtime.passThrough();
+      return;
+    }
+    var responseHeaders = GSS.Runtime.response.headers || {};
+    var contentType = responseHeaders["Content-Type"] || responseHeaders["content-type"] || "text/vtt";
+    GSS.Subtitle.translateBody(body, requestUrl, contentType, "bilingual", config.source, config.target, config, logger, function (error, translated, changed, format) {
+      if (error || !changed || !format) {
+        trace("fallback", {
+          reason: error ? String(error) : "translation unchanged",
+          inputCues: originalValidation.cueCount
+        }, error ? "warn" : "info");
+        GSS.Runtime.passThrough();
+        return;
+      }
+      var outputValidation = GSS.VTT.validate(translated, originalValidation.cueCount);
+      if (!outputValidation.valid) {
+        trace("fallback", {
+          reason: "translated WebVTT validation failed",
+          inputCues: originalValidation.cueCount,
+          outputCues: outputValidation.cueCount
+        }, "warn");
+        GSS.Runtime.passThrough();
+        return;
+      }
+      var outputHeaders = {};
+      Object.keys(responseHeaders).forEach(function (key) { outputHeaders[key] = responseHeaders[key]; });
+      outputHeaders["Cache-Control"] = "no-store, no-cache, must-revalidate";
+      outputHeaders["Expires"] = "0";
+      trace("rewritten", {
+        format: format.id,
+        mode: "bilingual",
+        source: config.source,
+        target: config.target,
+        inputSize: body.length,
+        outputSize: String(translated).length,
+        inputCues: originalValidation.cueCount,
+        outputCues: outputValidation.cueCount,
+        valid: true,
+        fallback: "original Paramount WebVTT"
+      });
+      GSS.Runtime.doneBody(translated, outputHeaders, format.contentTypeFor ? format.contentTypeFor(translated, contentType) : format.contentType);
+    });
   } catch (error) {
-    logger.error("manifest processing failed; original response preserved", { error: String(error), stack: error && error.stack });
-    if (config.logEnabled && GSS.Diagnostics) GSS.Diagnostics.record({ requestId: requestId, scope: "manifest", url: GSS.Runtime.request.url || "", type: "exception", level: "error", status: "failed", error: String(error) });
+    logger.error("direct Paramount subtitle processing failed; original response preserved", { error: String(error) });
+    trace("fallback", { reason: String(error) }, "error");
     GSS.Runtime.passThrough();
   }
 })();

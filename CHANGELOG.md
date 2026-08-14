@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.8.1
+
+- Add a Paramount tvOS-only fallback that translates original AppleCoreMedia WebVTT responses in place when the app bypasses the rewritten master URL.
+- Preserve Paramount playback metadata, DRM, license, audio, video and mobile Apple-client behavior; the fallback activates only for Apple TV subtitle requests.
+- Validate cue counts before returning translated WebVTT and preserve the original subtitle response on provider or format errors.
+
 ## 0.8.0
 
 - Keep Paramount virtual manifest, subtitle playlist, and subtitle object URLs on the trusted original media hostname under a locally served `/__gss__/` path.

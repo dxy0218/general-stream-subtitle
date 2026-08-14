@@ -32,6 +32,8 @@
       && /\/apps-api\/v\d+(?:\.\d+)*\/(?:iphone|ipad|ios|appletv|tvos|appletvtvos)\/(?:video\/cid\/[^\/?#]+|dynamicplay\/(?:show|movie)\/[^\/?#]+|content\/playability)\.json$/i.test(GSS.Url.path(requestUrl));
     var paramountSessionMetadata = /^(?:paramount|paramount-live)$/.test(platform.id)
       && /\/apps-api\/v\d+(?:\.\d+)*\/(?:iphone|ipad|ios|appletv|tvos|appletvtvos)\/irdeto-control\/session-token\.json$/i.test(GSS.Url.path(requestUrl));
+    var paramountTvOSMetadata = /^(?:paramount|paramount-live)$/.test(platform.id)
+      && /\/apps-api\/v\d+(?:\.\d+)*\/appletvtvos\//i.test(GSS.Url.path(requestUrl));
     var paramountMetadataPath = GSS.Url.path(requestUrl);
     var paramountMetadataEndpoint = /\/content\/playability\.json$/i.test(paramountMetadataPath) ? "content/playability"
       : /\/dynamicplay\//i.test(paramountMetadataPath) ? "dynamicplay" : "video/cid";
@@ -83,14 +85,21 @@
       contentType = "application/dash+xml; charset=utf-8";
       record(platform, "dash", output !== body, { strategy: GSS.Platforms.useSourceReplacement(platform, config) ? "replace-source" : "duplicate" });
     } else if (/^\s*[\[{]/.test(body) && /^(max|discovery|paramount|paramount-live)$/.test(platform.id)) {
-      var jsonResult = paramountSessionMetadata
-        ? GSS.PlaybackJson.proxyParamountManifests(body, config, logger, platform, "session-token")
-        : paramountPlaybackMetadata
-          ? GSS.PlaybackJson.adaptParamountPlayback(body, requestUrl, config, logger, platform, paramountMetadataEndpoint)
-          : GSS.PlaybackJson.inject(body, requestUrl, config, logger, platform);
+      // The current Paramount tvOS client obtains the original WebVTT media
+      // even after a response script changes streamingUrl, and never requests
+      // the synthetic master. Preserve its playback JSON and let the dedicated
+      // AppleCoreMedia WebVTT response fallback translate the selected source
+      // track in place. Mobile Apple clients keep the proven JSON adaptation.
+      var jsonResult = paramountTvOSMetadata
+        ? { body: body, changed: false, summary: { reason: "tvOS direct WebVTT fallback", nodesVisited: 0 } }
+        : paramountSessionMetadata
+          ? GSS.PlaybackJson.proxyParamountManifests(body, config, logger, platform, "session-token")
+          : paramountPlaybackMetadata
+            ? GSS.PlaybackJson.adaptParamountPlayback(body, requestUrl, config, logger, platform, paramountMetadataEndpoint)
+            : GSS.PlaybackJson.inject(body, requestUrl, config, logger, platform);
       output = jsonResult.body;
       contentType = "application/json; charset=utf-8";
-      if (paramountPlaybackMetadata && !jsonResult.changed) {
+      if (paramountPlaybackMetadata && !paramountTvOSMetadata && !jsonResult.changed) {
         logger.warn("Paramount playback metadata exposed no supported text track", {
           endpoint: paramountMetadataEndpoint,
           reason: jsonResult.summary && jsonResult.summary.reason || "unchanged",

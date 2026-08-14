@@ -112,6 +112,58 @@ test("admin POST saves provider, formats, platforms, and API key without exposin
   assert.match(result.response.body,/option value="duplicate" selected/);
 });
 
+test("Paramount tvOS direct WebVTT fallback translates the original English rendition", () => {
+  const vtt=fs.readFileSync(path.join(root,"tests/fixtures/sample.vtt"),"utf8");
+  const store=new Map(); let result; let calls=0;
+  run("dist/direct-subtitle.js",{
+    $request:{
+      url:"https://vod.vtg.paramount.tech/library/show/captions/en/seg_1.vtt",
+      headers:{"User-Agent":"AppleCoreMedia/1.0 (Apple TV; CPU OS 26_6 like Mac OS X)"}
+    },
+    $response:{body:vtt,headers:{"Content-Type":"text/vtt","Content-Length":"999","ETag":"stale","Cache-Control":"public,max-age=7776000"}},
+    $httpClient:{get(options,cb){calls++;cb(null,{status:200},JSON.stringify([[['[[GSS_0000]]\n\u4f60\u597d\n[[GSS_0001]]\n\u4f60\u597d\u5417\uff1f','',null,null]]]));}},
+    $persistentStore:{read(k){return store.get(k)||null;},write(v,k){store.set(k,v);return true;}},
+    $done(p){result=p;}
+  });
+  assert.equal(calls,1);
+  assert.match(result.body,/\u4f60\u597d\nHello there\./);
+  assert.match(result.body,/\u4f60\u597d\u5417\uff1f\n<v Speaker>How are you\?<\/v>/);
+  assert.equal(result.headers["Content-Length"],undefined);
+  assert.equal(result.headers.ETag,undefined);
+  assert.equal(result.headers["Cache-Control"],"no-store, no-cache, must-revalidate");
+  const records=JSON.parse(store.get("GSS_DIAGNOSTICS_V1"));
+  assert.equal(records[0].type,"direct-subtitle-translation");
+  assert.equal(records[0].status,"rewritten");
+  assert.equal(records[0].details.inputCues,2);
+  assert.equal(records[0].details.outputCues,2);
+});
+
+test("Paramount direct WebVTT fallback leaves iPhone responses untouched", () => {
+  const vtt=fs.readFileSync(path.join(root,"tests/fixtures/sample.vtt"),"utf8");
+  let result; let calls=0;
+  run("dist/direct-subtitle.js",{
+    $request:{url:"https://vod.vtg.paramount.tech/library/show/captions/en/seg_1.vtt",headers:{"User-Agent":"AppleCoreMedia/1.0 (iPhone; CPU iPhone OS 26_6 like Mac OS X)"}},
+    $response:{body:vtt,headers:{"Content-Type":"text/vtt"}},
+    $httpClient:{get(){calls++;}},
+    $persistentStore:{read(){return null;},write(){return true;}},
+    $done(p){result=p;}
+  });
+  assert.equal(calls,0);
+  assert.equal(Object.keys(result).length,0);
+});
+
+test("Paramount tvOS playback JSON remains byte-for-byte unchanged for direct WebVTT fallback", () => {
+  const body=JSON.stringify({streamingUrl:"https://vod.vtg.paramount.tech/library/show/master.m3u8",ls_session:"private"});
+  let result;
+  run("dist/manifest.js",{
+    $request:{url:"https://www.paramountplus.com/apps-api/v3.3/appletvtvos/irdeto-control/session-token.json?contentId=demo",headers:{}},
+    $response:{body,headers:{"Content-Type":"application/json"}},
+    $persistentStore:{read(){return null;},write(){return true;}},
+    $done(p){result=p;}
+  });
+  assert.equal(Object.keys(result).length,0);
+});
+
 test("Paramount master Gateway keeps media routes absolute and virtualizes the trusted subtitle URI", () => {
   const master = fs.readFileSync(path.join(root, "tests/fixtures/paramount-live-master.m3u8"), "utf8");
   const store = new Map(); let result;

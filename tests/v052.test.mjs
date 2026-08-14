@@ -81,17 +81,17 @@ test("Paramount+ playback JSON preserves the official text-track identity", () =
   assert.match(decodeURIComponent(parsed.playback.textTracks[0].url), /strategy=replace-source/);
 });
 
-test("Shadowrocket processes Paramount iOS and current tvOS playback metadata", () => {
+test("Shadowrocket processes Paramount iOS metadata and preserves current tvOS playback metadata", () => {
   const body = fs.readFileSync(path.join(root, "tests/fixtures/paramount-iphone-playback.json"), "utf8");
-  const urls = [
-    "https://www.paramountplus.com/apps-api/v2.0/iphone/video/cid/demo-paramount-vod.json?locale=en-US",
+  const mobileUrl = "https://www.paramountplus.com/apps-api/v2.0/iphone/video/cid/demo-paramount-vod.json?locale=en-US";
+  const tvUrls = [
     "https://www.paramountplus.com/apps-api/v3.1/appletvtvos/dynamicplay/show/61457158.json?locale=en&platformType=appletvtvos",
     "https://www.paramountplus.com/apps-api/v3.1/appletvtvos/content/playability.json?contentId=demo-paramount-vod"
   ];
-  for (const url of urls) {
+  {
     const { persistent } = storeRuntime(); let result;
     run("dist/manifest.js", {
-      $request: { url, headers: {} },
+      $request: { url: mobileUrl, headers: {} },
       $response: { body, headers: { "Content-Type": "application/json" } },
       $argument: "presetMode=true&safePlayback=true&platformParamount=true&paramountReplaceSource=true&logEnabled=true",
       $persistentStore: persistent,
@@ -104,9 +104,20 @@ test("Shadowrocket processes Paramount iOS and current tvOS playback metadata", 
     assert.match(decodeURIComponent(captionUrl), /platform=paramount/);
     assert.match(decodeURIComponent(captionUrl), /strategy=replace-source/);
   }
+  for (const url of tvUrls) {
+    const { persistent } = storeRuntime(); let result;
+    run("dist/manifest.js", {
+      $request: { url, headers: {} },
+      $response: { body, headers: { "Content-Type": "application/json" } },
+      $argument: "presetMode=true&safePlayback=true&platformParamount=true&paramountReplaceSource=true&logEnabled=true",
+      $persistentStore: persistent,
+      $done(p) { result = p; }
+    });
+    assert.equal(Object.keys(result).length, 0);
+  }
 });
 
-test("Paramount tvOS session routes only an unsigned known-media HLS URL through the Gateway", () => {
+test("Paramount tvOS session stays unchanged for the direct WebVTT fallback", () => {
   const body = JSON.stringify({
     sessionToken: "private-session-token",
     playback: {
@@ -126,22 +137,15 @@ test("Paramount tvOS session routes only an unsigned known-media HLS URL through
     $persistentStore: persistent,
     $done(p) { result = p; }
   });
-  const parsed = JSON.parse(result.body);
-  assert.equal(parsed.sessionToken, "private-session-token");
-  assert.match(parsed.playback.masterUrl, /^https:\/\/vod\.pplus\.paramount\.tech\/__gss__\/manifest\?/);
-  assert.match(decodeURIComponent(parsed.playback.masterUrl), /origin=https:\/\/vod\.pplus\.paramount\.tech\/title\/master\.m3u8/);
-  assert.match(decodeURIComponent(parsed.playback.masterUrl), /version=0\.8\.0/);
-  assert.equal(parsed.playback.signedBackup, "https://vod.pplus.paramount.tech/title/master.m3u8?token=private");
-  assert.equal(parsed.playback.licenseUrl, "https://cbsi.live.ott.irdeto.com/streaming/getckc");
-  assert.equal(result.headers["Content-Length"], undefined);
+  assert.equal(Object.keys(result).length, 0);
   const records = JSON.parse(store.get("GSS_DIAGNOSTICS_V1"));
-  const warning = records.find((row) => row.message === "Paramount playback manifest routed through Gateway");
-  assert.equal(warning.details.endpoint, "session-token");
-  assert.equal(warning.details.manifests, 1);
+  const record = records.find((row) => row.type === "paramount-session-json");
+  assert.equal(record.changed, false);
+  assert.equal(record.details.reason, "tvOS direct WebVTT fallback");
   assert.doesNotMatch(JSON.stringify(records), /private-session-token|token=private/);
 });
 
-test("Paramount tvOS routes the playback metadata manifest through the Gateway before the Irdeto session", () => {
+test("Paramount tvOS playability stays unchanged for the direct WebVTT fallback", () => {
   const body = JSON.stringify({
     success: true,
     content: {
@@ -160,16 +164,12 @@ test("Paramount tvOS routes the playback metadata manifest through the Gateway b
     $persistentStore: persistent,
     $done(p) { result = p; }
   });
-  const parsed = JSON.parse(result.body);
-  assert.match(parsed.content.masterUrl, /^https:\/\/vod\.pplus\.paramount\.tech\/__gss__\/manifest\?/);
-  assert.match(decodeURIComponent(parsed.content.masterUrl), /origin=https:\/\/vod\.pplus\.paramount\.tech\/title\/master\.m3u8/);
-  assert.match(decodeURIComponent(parsed.content.masterUrl), /version=0\.8\.0/);
-  assert.equal(result.headers["Content-Length"], undefined);
+  assert.equal(Object.keys(result).length, 0);
   const records = JSON.parse(store.get("GSS_DIAGNOSTICS_V1"));
-  const warning = records.find((row) => row.message === "Paramount playback manifest routed through Gateway");
-  assert.equal(warning.details.endpoint, "content/playability");
-  assert.equal(warning.details.manifests, 1);
-  assert.equal(records.some((row) => row.message === "Paramount playback metadata exposed no supported text track"), false);
+  const record = records.find((row) => row.type === "playback-json");
+  assert.equal(record.changed, false);
+  assert.equal(record.details.reason, "tvOS direct WebVTT fallback");
+  assert.equal(records.some((row) => row.message === "Paramount playback manifest routed through Gateway"), false);
   assert.doesNotMatch(JSON.stringify(records), /private-token/);
 });
 
@@ -307,7 +307,7 @@ test("Shadowrocket Paramount Splice master uses the same source-replacement path
   assert.match(decoded, /strategy=replace-source/);
 });
 
-test("Paramount tvOS metadata without captions records a safe actionable warning", () => {
+test("Paramount tvOS metadata without captions records the direct WebVTT fallback", () => {
   const { store, persistent } = storeRuntime(); let result;
   run("dist/manifest.js", {
     $request: {
@@ -321,11 +321,11 @@ test("Paramount tvOS metadata without captions records a safe actionable warning
   });
   assert.deepEqual(Object.keys(result), []);
   const records = JSON.parse(store.get("GSS_DIAGNOSTICS_V1"));
-  const warning = records.find((row) => row.type === "runtime-log" && row.level === "warn");
-  assert.equal(warning.message, "Paramount playback metadata exposed no supported text track");
-  assert.equal(warning.details.endpoint, "content/playability");
-  assert.equal(warning.details.textTracks, 0);
-  assert.doesNotMatch(JSON.stringify(warning), /private-token/);
+  const record = records.find((row) => row.type === "playback-json");
+  assert.equal(record.status, "unchanged");
+  assert.equal(record.details.reason, "tvOS direct WebVTT fallback");
+  assert.equal(records.some((row) => row.type === "runtime-log" && row.level === "warn"), false);
+  assert.doesNotMatch(JSON.stringify(record), /private-token/);
 });
 
 test("Paramount direct WebVTT playlist is virtualized when the master manifest came from app cache", () => {
@@ -571,6 +571,18 @@ test("Shadowrocket Paramount metadata rule matches only Apple VOD playback descr
   assert.equal(pattern.test("https://api.paramountplus.com/graphql"), false);
 });
 
+test("Shadowrocket Paramount tvOS WebVTT rule matches only text subtitle objects", () => {
+  const content = fs.readFileSync(path.join(root, "modules", "GeneralStreamSubtitle.module"), "utf8");
+  const line = content.split("\n").find((item) => item.startsWith("GSS Paramount tvOS WebVTT ="));
+  const pattern = new RegExp(line.slice(line.indexOf("pattern=") + 8, line.indexOf(", requires-body=")));
+  assert.equal(pattern.test("https://vod.vtg.paramount.tech/intl_vms/title/captions/en/seg_1.vtt"), true);
+  assert.equal(pattern.test("https://vod.cbsaavideo.com/library/show/subtitles/en/segment.webvtt?token=x"), true);
+  assert.equal(pattern.test("https://splice-media.paramountplus.com/title/subtitles/en/seg_1.vtt"), true);
+  assert.equal(pattern.test("https://vod.vtg.paramount.tech/intl_vms/title/video/seg_1.m4s"), false);
+  assert.equal(pattern.test("https://vod.vtg.paramount.tech/intl_vms/title/audio/seg_1.ts"), false);
+  assert.equal(pattern.test("https://www.paramountplus.com/account/profile.vtt"), false);
+});
+
 test("Shadowrocket Gateway GET routes do not require a request body", () => {
   const content = fs.readFileSync(path.join(root, "modules", "GeneralStreamSubtitle.module"), "utf8");
   const getLine = content.split("\n").find((line) => line.startsWith("GSS Gateway ="));
@@ -645,7 +657,7 @@ test("generated module runtime URLs use immutable package-version paths", () => 
   const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
   for (const filename of ["GeneralStreamSubtitle.module", "GeneralStreamSubtitle.plugin", "GeneralStreamSubtitle.sgmodule"]) {
     const content = fs.readFileSync(path.join(root, "modules", filename), "utf8");
-    for (const bundle of ["manifest", "gateway", "youtube", "youtube-caption"]) {
+    for (const bundle of ["manifest", "gateway", "direct-subtitle", "youtube", "youtube-caption"]) {
       if (!content.includes(`/${bundle}.js`)) continue;
       const escapedVersion = pkg.version.replace(/\./g, "\\.");
       assert.match(content, new RegExp(`/dist/v${escapedVersion}/${bundle}\\.js`));
@@ -701,7 +713,7 @@ test("build publishes a uniquely named Shadowrocket module and versioned bundles
   assert.match(content, new RegExp(`^#!name=General Stream Subtitle v${pkg.version.replace(/\./g, "\\.")}`, "m"));
   assert.match(content, /PARAMOUNT:true/);
   assert.match(content, /OTHER:true/);
-  for (const bundle of ["manifest", "gateway", "youtube", "youtube-caption"]) {
+  for (const bundle of ["manifest", "gateway", "direct-subtitle", "youtube", "youtube-caption"]) {
     const bundlePath = path.join(root, "dist", `v${pkg.version}`, `${bundle}.js`);
     assert.equal(fs.existsSync(bundlePath), true);
     assert.match(fs.readFileSync(bundlePath, "utf8"), new RegExp(`General Stream Subtitle ${pkg.version.replace(/\./g, "\\.")}`));
