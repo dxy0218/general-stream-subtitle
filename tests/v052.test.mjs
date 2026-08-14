@@ -81,22 +81,28 @@ test("Paramount+ playback JSON preserves the official text-track identity", () =
   assert.match(decodeURIComponent(parsed.playback.textTracks[0].url), /strategy=replace-source/);
 });
 
-test("Shadowrocket processes Paramount Apple playback metadata and virtualizes its caption URL", () => {
+test("Shadowrocket processes Paramount iOS and current tvOS playback metadata", () => {
   const body = fs.readFileSync(path.join(root, "tests/fixtures/paramount-iphone-playback.json"), "utf8");
-  const { persistent } = storeRuntime(); let result;
-  run("dist/manifest.js", {
-    $request: { url: "https://www.paramountplus.com/apps-api/v2.0/iphone/video/cid/demo-paramount-vod.json?locale=en-US", headers: {} },
-    $response: { body, headers: { "Content-Type": "application/json" } },
-    $argument: "presetMode=true&safePlayback=true&platformParamount=true&paramountReplaceSource=true&logEnabled=true",
-    $persistentStore: persistent,
-    $done(p) { result = p; }
-  });
-  const parsed = JSON.parse(result.body);
-  const captionUrl = parsed.itemList[0].webVTTCaptionURL;
-  assert.match(captionUrl, /https:\/\/example\.com\/playlist\?/);
-  assert.match(decodeURIComponent(captionUrl), /origin=https:\/\/vod\.pplus\.paramount\.tech\/demo\/English_100\/stream_vtt\.m3u8/);
-  assert.match(decodeURIComponent(captionUrl), /platform=paramount/);
-  assert.match(decodeURIComponent(captionUrl), /strategy=replace-source/);
+  const urls = [
+    "https://www.paramountplus.com/apps-api/v2.0/iphone/video/cid/demo-paramount-vod.json?locale=en-US",
+    "https://www.paramountplus.com/apps-api/v3.1/appletvtvos/dynamicplay/show/61457158.json?locale=en&platformType=appletvtvos"
+  ];
+  for (const url of urls) {
+    const { persistent } = storeRuntime(); let result;
+    run("dist/manifest.js", {
+      $request: { url, headers: {} },
+      $response: { body, headers: { "Content-Type": "application/json" } },
+      $argument: "presetMode=true&safePlayback=true&platformParamount=true&paramountReplaceSource=true&logEnabled=true",
+      $persistentStore: persistent,
+      $done(p) { result = p; }
+    });
+    const parsed = JSON.parse(result.body);
+    const captionUrl = parsed.itemList[0].webVTTCaptionURL;
+    assert.match(captionUrl, /https:\/\/example\.com\/playlist\?/);
+    assert.match(decodeURIComponent(captionUrl), /origin=https:\/\/vod\.pplus\.paramount\.tech\/demo\/English_100\/stream_vtt\.m3u8/);
+    assert.match(decodeURIComponent(captionUrl), /platform=paramount/);
+    assert.match(decodeURIComponent(captionUrl), /strategy=replace-source/);
+  }
 });
 
 test("Discovery compatibility mode overrides stored settings and can fully pass through", () => {
@@ -442,6 +448,11 @@ test("Shadowrocket Paramount metadata rule matches only Apple VOD playback descr
   const pattern = new RegExp(line.slice(line.indexOf("pattern=") + 8, line.indexOf(", requires-body=")));
   assert.equal(pattern.test("https://www.paramountplus.com/apps-api/v2.0/iphone/video/cid/demo.json?locale=en-US"), true);
   assert.equal(pattern.test("https://www.paramountplus.com/apps-api/v3.0/ipad/video/cid/demo.json"), true);
+  assert.equal(pattern.test("https://www.paramountplus.com/apps-api/v3.1/appletvtvos/dynamicplay/show/61457158.json?platformType=appletvtvos"), true);
+  assert.equal(pattern.test("https://www.paramountplus.com/apps-api/v3.1/appletvtvos/dynamicplay/movie/12345.json"), true);
+  assert.equal(pattern.test("https://www.paramountplus.com/apps-api/v3.0/appletvtvos/video/streams/history.json"), false);
+  assert.equal(pattern.test("https://www.paramountplus.com/apps-api/v3.1/appletvtvos/content/playability.json"), false);
+  assert.equal(pattern.test("https://www.paramountplus.com/apps-api/v3.3/appletvtvos/irdeto-control/session-token.json"), false);
   assert.equal(pattern.test("https://www.paramountplus.com/apps-api/v2.0/iphone/auth/login.json"), false);
   assert.equal(pattern.test("https://www.paramountplus.com/apps-api/v3.0/iphone/account/profile.json"), false);
   assert.equal(pattern.test("https://auth.paramountplus.com/login"), false);

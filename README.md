@@ -4,7 +4,7 @@
 
 项目通过 HTTPS MITM 读取播放器清单、播放器响应或文本字幕。默认兼容策略会保留平台原有字幕轨的名称、语言和选择身份，只把字幕 URI 指向翻译网关；也可以切换为新增 **`Translate-zh`** 轨道。播放器请求该轨道后，模块获取原字幕、调用翻译 Provider，并返回双语或纯翻译字幕。
 
-> 当前版本：**v0.7.2**
+> 当前版本：**v0.7.3**
 > 支持系统：iOS、iPadOS、macOS、tvOS（具体能力取决于代理客户端与流媒体 App）  
 > 开源协议：MIT
 
@@ -439,6 +439,12 @@ cdn.example.net
 ```
 
 ## 版本更新记录
+
+### v0.7.3 — Paramount+ Apple TV 播放元数据适配
+
+- 根据 Apple TV 实机 PacketTunnel 请求链确认，Paramount+ tvOS 15.23.0 使用整体平台标识 `appletvtvos`，且通过 `apps-api/.../dynamicplay/show/*.json` 取得所选节目的播放描述。
+- Shadowrocket 安全规则现在仅补充上述 tvOS VOD 元数据入口；手机端原有 `video/cid/*.json` 路径继续保留。
+- 登录、账户、播放历史、可播放性检查和 DRM 会话接口继续排除，避免扩大 HTTP 解密范围影响播放。
 
 ### v0.7.2 — Paramount+ Apple 播放元数据接管
 
