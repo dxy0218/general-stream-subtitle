@@ -152,7 +152,8 @@ GSS.PlaybackJson = (function createPlaybackJsonAdapter() {
     });
   }
 
-  function refreshParamountManifests(body, logger, platform) {
+  function refreshParamountManifests(body, logger, platform, options) {
+    options = options || {};
     var value;
     try { value = JSON.parse(String(body || "")); }
     catch (_) { return { body: body, changed: false, summary: { reason: "invalid json" } }; }
@@ -197,19 +198,43 @@ GSS.PlaybackJson = (function createPlaybackJsonAdapter() {
     var changed = summary.unsignedManifests > 0;
     summary.reason = changed ? "unsigned HLS manifest cache refreshed"
       : (summary.manifests ? "only signed HLS manifests found" : "no supported HLS manifest URL");
-    if (changed) logger.warn("Paramount session HLS manifest cache refreshed", {
+    if (changed && options.logChanged !== false) logger.warn(options.changedMessage || "Paramount session HLS manifest cache refreshed", {
       platform: platform ? platform.id : "unknown",
+      endpoint: options.endpoint || "session-token",
       manifests: summary.unsignedManifests,
       signedSkipped: summary.signedManifestsSkipped
     });
-    else logger.warn("Paramount session exposed no refreshable HLS manifest URL", {
+    else if (!changed && options.logMissing !== false) logger.warn(options.missingMessage || "Paramount session exposed no refreshable HLS manifest URL", {
       platform: platform ? platform.id : "unknown",
+      endpoint: options.endpoint || "session-token",
       reason: summary.reason,
       manifests: summary.manifests,
       signedSkipped: summary.signedManifestsSkipped,
       nodesVisited: summary.nodesVisited
     });
     return { body: changed ? JSON.stringify(value) : body, changed: changed, summary: summary };
+  }
+
+  function adaptParamountPlayback(body, requestUrl, config, logger, platform, endpoint) {
+    // The tvOS player resolves its AVPlayer item from dynamicplay/playability
+    // before requesting the Irdeto session. Refresh manifest URLs at this
+    // earlier boundary as well as injecting any caption fields exposed there.
+    var refreshed = refreshParamountManifests(body, logger, platform, {
+      endpoint: endpoint || "playback-metadata",
+      logMissing: false,
+      changedMessage: "Paramount playback metadata HLS manifest cache refreshed"
+    });
+    var injected = inject(refreshed.body, requestUrl, config, logger, platform);
+    var summary = injected.summary || {};
+    summary.manifests = refreshed.summary && refreshed.summary.manifests || 0;
+    summary.unsignedManifests = refreshed.summary && refreshed.summary.unsignedManifests || 0;
+    summary.signedManifestsSkipped = refreshed.summary && refreshed.summary.signedManifestsSkipped || 0;
+    summary.manifestRefreshReason = refreshed.summary && refreshed.summary.reason || "";
+    return {
+      body: injected.body,
+      changed: !!(refreshed.changed || injected.changed),
+      summary: summary
+    };
   }
 
   function inject(body, requestUrl, config, logger, platform) {
@@ -280,5 +305,9 @@ GSS.PlaybackJson = (function createPlaybackJsonAdapter() {
     return { body: body, changed: false, summary: summary };
   }
 
-  return { inject: inject, refreshParamountManifests: refreshParamountManifests };
+  return {
+    inject: inject,
+    refreshParamountManifests: refreshParamountManifests,
+    adaptParamountPlayback: adaptParamountPlayback
+  };
 })();

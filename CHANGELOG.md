@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.7.7
+
+- Refresh unsigned Paramount HLS URLs in Apple playback metadata before the Irdeto session creates the tvOS AVPlayer item.
+- Keep signed manifests, DRM/token fields, media hosts, and non-Paramount platform behavior unchanged.
+- Record which playback-metadata endpoint supplied the refreshed manifest without logging private query values.
+
 ## 0.7.0
 
 - Keep the proven HBO Max adapter unchanged while re-auditing the remaining platform paths.

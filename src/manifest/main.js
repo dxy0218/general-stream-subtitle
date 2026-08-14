@@ -32,6 +32,9 @@
       && /\/apps-api\/v\d+(?:\.\d+)*\/(?:iphone|ipad|ios|appletv|tvos|appletvtvos)\/(?:video\/cid\/[^\/?#]+|dynamicplay\/(?:show|movie)\/[^\/?#]+|content\/playability)\.json$/i.test(GSS.Url.path(requestUrl));
     var paramountSessionMetadata = /^(?:paramount|paramount-live)$/.test(platform.id)
       && /\/apps-api\/v\d+(?:\.\d+)*\/(?:iphone|ipad|ios|appletv|tvos|appletvtvos)\/irdeto-control\/session-token\.json$/i.test(GSS.Url.path(requestUrl));
+    var paramountMetadataPath = GSS.Url.path(requestUrl);
+    var paramountMetadataEndpoint = /\/content\/playability\.json$/i.test(paramountMetadataPath) ? "content/playability"
+      : /\/dynamicplay\//i.test(paramountMetadataPath) ? "dynamicplay" : "video/cid";
     if (platform.id === "discovery") processingMode = String(config.discoveryMode || "full");
     else if (config.safePlayback && (paramountPlaybackMetadata || paramountSessionMetadata)) processingMode = "full";
     else if (config.safePlayback && /^(max|pluto|prime|hulu)$/.test(platform.id)) processingMode = "hls-only";
@@ -81,15 +84,15 @@
       record(platform, "dash", output !== body, { strategy: GSS.Platforms.useSourceReplacement(platform, config) ? "replace-source" : "duplicate" });
     } else if (/^\s*[\[{]/.test(body) && /^(max|discovery|paramount|paramount-live)$/.test(platform.id)) {
       var jsonResult = paramountSessionMetadata
-        ? GSS.PlaybackJson.refreshParamountManifests(body, logger, platform)
-        : GSS.PlaybackJson.inject(body, requestUrl, config, logger, platform);
+        ? GSS.PlaybackJson.refreshParamountManifests(body, logger, platform, { endpoint: "session-token" })
+        : paramountPlaybackMetadata
+          ? GSS.PlaybackJson.adaptParamountPlayback(body, requestUrl, config, logger, platform, paramountMetadataEndpoint)
+          : GSS.PlaybackJson.inject(body, requestUrl, config, logger, platform);
       output = jsonResult.body;
       contentType = "application/json; charset=utf-8";
       if (paramountPlaybackMetadata && !jsonResult.changed) {
-        var metadataPath = GSS.Url.path(requestUrl);
         logger.warn("Paramount playback metadata exposed no supported text track", {
-          endpoint: /\/content\/playability\.json$/i.test(metadataPath) ? "content/playability"
-            : /\/dynamicplay\//i.test(metadataPath) ? "dynamicplay" : "video/cid",
+          endpoint: paramountMetadataEndpoint,
           reason: jsonResult.summary && jsonResult.summary.reason || "unchanged",
           arrays: jsonResult.summary && jsonResult.summary.arraysInspected || 0,
           textTracks: jsonResult.summary && jsonResult.summary.textTracks || 0,
