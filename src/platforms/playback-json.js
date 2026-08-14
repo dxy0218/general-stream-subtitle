@@ -102,7 +102,7 @@ GSS.PlaybackJson = (function createPlaybackJsonAdapter() {
   }
 
   function isVirtualUrl(value) {
-    return /(?:gss\.local|example\.com)\/(?:manifest|playlist|subtitle)/.test(String(value || ""));
+    return /(?:(?:gss\.local|example\.com)\/(?:manifest|playlist|subtitle)|\/__gss__\/(?:manifest|playlist|subtitle))/.test(String(value || ""));
   }
 
   function isKnownParamountManifest(url) {
@@ -168,7 +168,7 @@ GSS.PlaybackJson = (function createPlaybackJsonAdapter() {
     return array.some(function (item) {
       var url = item && typeof item === "object" ? firstString(item, URL_KEYS) : null;
       return item && typeof item === "object" && (item.gssTranslated === true || labelOf(item) === config.trackName
-        || (url && /(?:gss\.local|example\.com)\/(?:playlist|subtitle)/.test(url.value)));
+        || (url && /(?:(?:gss\.local|example\.com)\/(?:playlist|subtitle)|\/__gss__\/(?:playlist|subtitle))/.test(url.value)));
     });
   }
 
@@ -242,7 +242,9 @@ GSS.PlaybackJson = (function createPlaybackJsonAdapter() {
       summary.manifests += 1;
       if (url.indexOf("?") >= 0) { summary.signedManifestsSkipped += 1; return url; }
       summary.unsignedManifests += 1;
-      return GSS.Url.virtual(config.virtualOrigin, "/manifest", {
+      // Keep Paramount's trusted media hostname while changing the cache key.
+      // Shadowrocket answers /__gss__ locally before the request reaches CDN.
+      return GSS.Url.virtual(GSS.Url.origin(url) + "/__gss__", "/manifest", {
         origin: url,
         mode: "bilingual",
         source: config.source,

@@ -128,9 +128,9 @@ test("Paramount tvOS session routes only an unsigned known-media HLS URL through
   });
   const parsed = JSON.parse(result.body);
   assert.equal(parsed.sessionToken, "private-session-token");
-  assert.match(parsed.playback.masterUrl, /^https:\/\/example\.com\/manifest\?/);
+  assert.match(parsed.playback.masterUrl, /^https:\/\/vod\.pplus\.paramount\.tech\/__gss__\/manifest\?/);
   assert.match(decodeURIComponent(parsed.playback.masterUrl), /origin=https:\/\/vod\.pplus\.paramount\.tech\/title\/master\.m3u8/);
-  assert.match(decodeURIComponent(parsed.playback.masterUrl), /version=0\.7\.9/);
+  assert.match(decodeURIComponent(parsed.playback.masterUrl), /version=0\.8\.0/);
   assert.equal(parsed.playback.signedBackup, "https://vod.pplus.paramount.tech/title/master.m3u8?token=private");
   assert.equal(parsed.playback.licenseUrl, "https://cbsi.live.ott.irdeto.com/streaming/getckc");
   assert.equal(result.headers["Content-Length"], undefined);
@@ -161,9 +161,9 @@ test("Paramount tvOS routes the playback metadata manifest through the Gateway b
     $done(p) { result = p; }
   });
   const parsed = JSON.parse(result.body);
-  assert.match(parsed.content.masterUrl, /^https:\/\/example\.com\/manifest\?/);
+  assert.match(parsed.content.masterUrl, /^https:\/\/vod\.pplus\.paramount\.tech\/__gss__\/manifest\?/);
   assert.match(decodeURIComponent(parsed.content.masterUrl), /origin=https:\/\/vod\.pplus\.paramount\.tech\/title\/master\.m3u8/);
-  assert.match(decodeURIComponent(parsed.content.masterUrl), /version=0\.7\.9/);
+  assert.match(decodeURIComponent(parsed.content.masterUrl), /version=0\.8\.0/);
   assert.equal(result.headers["Content-Length"], undefined);
   const records = JSON.parse(store.get("GSS_DIAGNOSTICS_V1"));
   const warning = records.find((row) => row.message === "Paramount playback manifest routed through Gateway");
@@ -584,6 +584,10 @@ test("Shadowrocket Gateway GET routes do not require a request body", () => {
   assert.equal(getPattern.test("http://gss.local/health"), true);
   assert.equal(getPattern.test("https://example.com/"), true);
   assert.equal(getPattern.test("https://example.com/health"), true);
+  assert.equal(getPattern.test("https://vod.pplus.paramount.tech/__gss__/manifest?origin=https%3A%2F%2Fvod.pplus.paramount.tech%2Fshow%2Fmaster.m3u8"), true);
+  assert.equal(getPattern.test("https://vod.pplus.paramount.tech/__gss__/playlist?origin=https%3A%2F%2Fvod.pplus.paramount.tech%2Fshow%2Fstream_vtt.m3u8"), true);
+  assert.equal(getPattern.test("https://vod.pplus.paramount.tech/__gss__/subtitle?origin=https%3A%2F%2Fvod.pplus.paramount.tech%2Fshow%2F1.vtt"), true);
+  assert.equal(getPattern.test("https://vod.pplus.paramount.tech/show/master.m3u8"), false);
   assert.equal(getPattern.test("http://gss.local/subtitle?origin=https%3A%2F%2Fexample.com%2Fa.vtt"), true);
   assert.equal(getPattern.test("http://gss.local/save"), false);
   assert.equal(savePattern.test("http://gss.local/save"), true);

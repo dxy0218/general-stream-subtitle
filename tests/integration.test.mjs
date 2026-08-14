@@ -118,7 +118,7 @@ test("Paramount master Gateway keeps media routes absolute and virtualizes the t
   const origin = "https://vod.pplus.paramount.tech/library/show/master.m3u8";
   run("dist/gateway.js", {
     $request: {
-      url: "https://example.com/manifest?origin=" + encodeURIComponent(origin) + "&mode=bilingual&source=auto&target=zh-CN&platform=paramount&version=0.7.9",
+      url: "https://vod.pplus.paramount.tech/__gss__/manifest?origin=" + encodeURIComponent(origin) + "&mode=bilingual&source=auto&target=zh-CN&platform=paramount&version=0.8.0",
       headers: { "User-Agent": "AppleCoreMedia" }
     },
     $httpClient: { get(options, callback) { callback(null, { status: 200, headers: { "Content-Type": "application/vnd.apple.mpegurl" } }, master); } },
@@ -127,7 +127,7 @@ test("Paramount master Gateway keeps media routes absolute and virtualizes the t
   });
   const body = result.response.body;
   assert.match(body, /NAME="English CC"/);
-  assert.match(body, /URI="https:\/\/example\.com\/playlist\?/);
+  assert.match(body, /URI="https:\/\/vod\.pplus\.paramount\.tech\/__gss__\/playlist\?/);
   assert.match(decodeURIComponent(body), /origin=https:\/\/vod\.pplus\.paramount\.tech\/library\/show\/captions\/en\/master\.m3u8\?token=live/);
   assert.match(body, /https:\/\/vod\.pplus\.paramount\.tech\/library\/show\/video\/720p\.m3u8/);
   assert.doesNotMatch(body, /\nvideo\/720p\.m3u8/);

@@ -3,6 +3,13 @@
   var logger = GSS.Logger(config, "gateway");
   var requestUrl = GSS.Runtime.request.url || "";
   var path = GSS.Url.path(requestUrl);
+  var sameOriginGateway = path.indexOf("/__gss__/") === 0;
+  if (sameOriginGateway) {
+    path = path.slice("/__gss__".length) || "/";
+    // Keep every virtual HLS hop on the trusted Paramount media hostname.
+    // The config object is scoped to this script invocation.
+    config.virtualOrigin = GSS.Url.origin(requestUrl) + "/__gss__";
+  }
   var host = GSS.Url.host(requestUrl);
   var requestId = GSS.Diagnostics ? GSS.Diagnostics.requestId() : "";
   var currentPlatform = "unknown";
@@ -89,8 +96,14 @@
   }
 
   try {
-    var isGatewayHost = host === "example.com" || host === "gss.local";
-    var isAdminHost = isGatewayHost || host === "127.0.0.1" || host === "localhost";
+    var isParamountGatewayHost = sameOriginGateway && (
+      /(^|\.)(?:pplus\.paramount\.tech|paramount\.tech|cbsaavideo\.com|cbsivideo\.com)$/.test(host)
+      || /^(?:[^.]+-pplus|cc)\.cbs\.com$/.test(host)
+      || host === "cbsi.live.ott.irdeto.com"
+      || /^(?:splice|splice-media)\.paramountplus\.com$/.test(host)
+    );
+    var isGatewayHost = host === "example.com" || host === "gss.local" || isParamountGatewayHost;
+    var isAdminHost = host === "example.com" || host === "gss.local" || host === "127.0.0.1" || host === "localhost";
     if (isAdminHost && GSS.Admin.handle(requestUrl, config, logger)) return;
     if (!isGatewayHost) { GSS.Runtime.passThrough(); return; }
 

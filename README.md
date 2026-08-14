@@ -4,7 +4,7 @@
 
 项目通过 HTTPS MITM 读取播放器清单、播放器响应或文本字幕。默认兼容策略会保留平台原有字幕轨的名称、语言和选择身份，只把字幕 URI 指向翻译网关；也可以切换为新增 **`Translate-zh`** 轨道。播放器请求该轨道后，模块获取原字幕、调用翻译 Provider，并返回双语或纯翻译字幕。
 
-> 当前版本：**v0.7.9**
+> 当前版本：**v0.8.0**
 > 支持系统：iOS、iPadOS、macOS、tvOS（具体能力取决于代理客户端与流媒体 App）  
 > 开源协议：MIT
 
@@ -439,6 +439,12 @@ cdn.example.net
 ```
 
 ## 版本更新记录
+
+### v0.8.0 — Paramount+ Apple TV 同源虚拟清单
+
+- 0.7.9 实机日志确认 `streamingUrl` 在 `dynamicplay` 和 Irdeto 会话中均被改写，但 tvOS 从未请求外部 `example.com/manifest`，而是回退到原 CDN 分片。
+- Paramount 虚拟主清单、字幕播放列表和字幕对象现在全部保留原 `*.pplus.paramount.tech` 主机，仅使用 Shadowrocket 本地应答的 `/__gss__/` 专用路径，兼容 App 的播放域名校验并生成新的 AVPlayer 缓存键。
+- `/__gss__/` 不会发送到 Paramount CDN；视频、音频、许可证、DRM、Token 和签名地址仍保持原始路径。
 
 ### v0.7.9 — Paramount+ Apple TV Irdeto 会话主清单 Gateway
 

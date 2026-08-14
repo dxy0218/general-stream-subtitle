@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.8.0
+
+- Keep Paramount virtual manifest, subtitle playlist, and subtitle object URLs on the trusted original media hostname under a locally served `/__gss__/` path.
+- Extend generated Gateway request rules to answer same-origin Paramount virtual paths without forwarding them to the CDN.
+- Preserve original audio, video, license, DRM, token, and signed URL routes.
+
 ## 0.7.9
 
 - Route the unsigned Paramount master manifest exposed by the Irdeto session response through the same synthetic Gateway used for Apple playback metadata.

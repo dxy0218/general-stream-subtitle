@@ -57,7 +57,7 @@ const paramountApplePlaybackPattern = String.raw`^https?:\/\/www\.paramountplus\
 // Only media delivery hosts and explicit manifest files are inspected. App,
 // account, playback-session, GraphQL and DRM endpoints stay outside the rule.
 const warnerMediaPattern = String.raw`^https?:\/\/(?:(?:[^\/]+\.)*(?:prod\.media\.max\.com|prd\.media\.max\.com|prod\.media\.h264\.io|prd\.media\.h264\.io|hbomaxcdn\.com)|manifests(?:\.v2)?\.api\.hbo\.com|[^\/.]*discovery[^\/.]*\.uplynk\.com|(?:dplus|discovery)[^\/.]*\.(?:h264\.io|akamaized\.net))\/.*\.(?:m3u8|mpd)(?:\?.*)?$`;
-const gatewayGetPattern = String.raw`^https?:\/\/(?:example\.com|gss\.local|127\.0\.0\.1(?::6170)?|localhost(?::6170)?)\/(?!save(?:[\/?#]|$)).*`;
+const gatewayGetPattern = String.raw`^https?:\/\/(?:(?:example\.com|gss\.local|127\.0\.0\.1(?::6170)?|localhost(?::6170)?)\/(?!save(?:[\/?#]|$)).*|(?:(?:[^\/]+\.)*(?:pplus\.paramount\.tech|paramount\.tech|cbsaavideo\.com|cbsivideo\.com)|(?:[^\/.]+-pplus|cc)\.cbs\.com|cbsi\.live\.ott\.irdeto\.com|splice(?:-media)?\.paramountplus\.com)\/__gss__\/(?:manifest|playlist|subtitle)(?:[\/?#].*)?)$`;
 const gatewaySavePattern = String.raw`^https?:\/\/(?:example\.com|gss\.local|127\.0\.0\.1(?::6170)?|localhost(?::6170)?)\/save(?:\?.*)?$`;
 const youtubePlayerPattern = String.raw`^https?:\/\/(?:www\.youtube\.com|m\.youtube\.com|music\.youtube\.com|tv\.youtube\.com|youtubei\.googleapis\.com)\/youtubei\/v1\/player(?:\?.*)?$`;
 const youtubeCaptionPattern = String.raw`^https?:\/\/(?:www\.youtube\.com|m\.youtube\.com|music\.youtube\.com|tv\.youtube\.com)\/api\/timedtext\?.*(?:gss_mode|gss_v)=.*`;
