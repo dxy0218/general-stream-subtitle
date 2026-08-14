@@ -111,3 +111,25 @@ test("admin POST saves provider, formats, platforms, and API key without exposin
   assert.match(result.response.body,/name="trackStrategy"/);
   assert.match(result.response.body,/option value="duplicate" selected/);
 });
+
+test("Paramount master Gateway keeps media routes absolute and virtualizes the trusted subtitle URI", () => {
+  const master = fs.readFileSync(path.join(root, "tests/fixtures/paramount-live-master.m3u8"), "utf8");
+  const store = new Map(); let result;
+  const origin = "https://vod.pplus.paramount.tech/library/show/master.m3u8";
+  run("dist/gateway.js", {
+    $request: {
+      url: "https://example.com/manifest?origin=" + encodeURIComponent(origin) + "&mode=bilingual&source=auto&target=zh-CN&platform=paramount&version=0.7.8",
+      headers: { "User-Agent": "AppleCoreMedia" }
+    },
+    $httpClient: { get(options, callback) { callback(null, { status: 200, headers: { "Content-Type": "application/vnd.apple.mpegurl" } }, master); } },
+    $persistentStore: { read(k) { return store.get(k) || null; }, write(v, k) { store.set(k, v); return true; } },
+    $done(payload) { result = payload; }
+  });
+  const body = result.response.body;
+  assert.match(body, /NAME="English CC"/);
+  assert.match(body, /URI="https:\/\/example\.com\/playlist\?/);
+  assert.match(decodeURIComponent(body), /origin=https:\/\/vod\.pplus\.paramount\.tech\/library\/show\/captions\/en\/master\.m3u8\?token=live/);
+  assert.match(body, /https:\/\/vod\.pplus\.paramount\.tech\/library\/show\/video\/720p\.m3u8/);
+  assert.doesNotMatch(body, /\nvideo\/720p\.m3u8/);
+  assert.equal(result.response.headers["Cache-Control"], "no-store, no-cache, must-revalidate");
+});

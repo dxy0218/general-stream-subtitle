@@ -102,7 +102,27 @@ GSS.PlaybackJson = (function createPlaybackJsonAdapter() {
   }
 
   function isVirtualUrl(value) {
-    return /(?:gss\.local|example\.com)\/(?:playlist|subtitle)/.test(String(value || ""));
+    return /(?:gss\.local|example\.com)\/(?:manifest|playlist|subtitle)/.test(String(value || ""));
+  }
+
+  function isKnownParamountManifest(url) {
+    if (typeof url !== "string" || !/^https?:\/\//i.test(url)) return false;
+    if (GSS.Url.extension(url) !== "m3u8") return false;
+    var host = GSS.Url.host(url);
+    return /(^|\.)(?:pplus\.paramount\.tech|paramount\.tech|cbsaavideo\.com|cbsivideo\.com)$/.test(host)
+      || /^(?:[^.]+-pplus|cc)\.cbs\.com$/.test(host)
+      || host === "cbsi.live.ott.irdeto.com"
+      || host === "splice-media.paramountplus.com";
+  }
+
+  function isParamountSubtitleManifest(url, key) {
+    var captionField = CAPTION_URL_KEYS.some(function (candidate) {
+      return String(candidate).toLowerCase() === String(key || "").toLowerCase();
+    });
+    if (captionField) return true;
+    var path = GSS.Url.path(url).toLowerCase();
+    return /(?:^|\/)(?:stream_vtt|manifest_[^/]*|[^/]*(?:subtitle|caption|webvtt|text)[^/]*)\.m3u8$/.test(path)
+      || /\/(?:subtitles?|captions?|webvtt|text)\//.test(path);
   }
 
   function virtualizeCaptionFields(item, requestUrl, config, platform, remaining) {
@@ -162,13 +182,7 @@ GSS.PlaybackJson = (function createPlaybackJsonAdapter() {
     var maxNodes = 5000;
 
     function refreshUrl(url) {
-      if (typeof url !== "string" || !/^https?:\/\//i.test(url)) return url;
-      if (GSS.Url.extension(url) !== "m3u8") return url;
-      var host = GSS.Url.host(url);
-      if (!/(^|\.)(?:pplus\.paramount\.tech|paramount\.tech|cbsaavideo\.com|cbsivideo\.com)$/.test(host)
-        && !/^(?:[^.]+-pplus|cc)\.cbs\.com$/.test(host)
-        && host !== "cbsi.live.ott.irdeto.com"
-        && host !== "splice-media.paramountplus.com") return url;
+      if (!isKnownParamountManifest(url)) return url;
       summary.manifests += 1;
       // Do not alter signed CDN URLs. The observed tvOS VOD master is public
       // and query-free; changing an authenticated query could break playback.
@@ -215,24 +229,73 @@ GSS.PlaybackJson = (function createPlaybackJsonAdapter() {
     return { body: changed ? JSON.stringify(value) : body, changed: changed, summary: summary };
   }
 
-  function adaptParamountPlayback(body, requestUrl, config, logger, platform, endpoint) {
-    // The tvOS player resolves its AVPlayer item from dynamicplay/playability
-    // before requesting the Irdeto session. Refresh manifest URLs at this
-    // earlier boundary as well as injecting any caption fields exposed there.
-    var refreshed = refreshParamountManifests(body, logger, platform, {
+  function proxyParamountManifests(body, config, logger, platform, endpoint) {
+    var value;
+    try { value = JSON.parse(String(body || "")); }
+    catch (_) { return { body: body, changed: false, summary: { reason: "invalid json" } }; }
+
+    var summary = { manifests: 0, unsignedManifests: 0, signedManifestsSkipped: 0, nodesVisited: 0 };
+    var maxNodes = 5000;
+
+    function proxyUrl(url, key) {
+      if (!isKnownParamountManifest(url) || isVirtualUrl(url) || isParamountSubtitleManifest(url, key)) return url;
+      summary.manifests += 1;
+      if (url.indexOf("?") >= 0) { summary.signedManifestsSkipped += 1; return url; }
+      summary.unsignedManifests += 1;
+      return GSS.Url.virtual(config.virtualOrigin, "/manifest", {
+        origin: url,
+        mode: "bilingual",
+        source: config.source,
+        target: config.target,
+        platform: platform ? platform.id : "paramount",
+        version: GSS.VERSION
+      });
+    }
+
+    function walk(node, depth, parentKey) {
+      summary.nodesVisited += 1;
+      if (!node || depth > 9 || summary.nodesVisited > maxNodes) return;
+      if (Array.isArray(node)) {
+        for (var i = 0; i < node.length; i += 1) {
+          if (typeof node[i] === "string") node[i] = proxyUrl(node[i], parentKey);
+          else walk(node[i], depth + 1, parentKey);
+        }
+        return;
+      }
+      if (typeof node !== "object") return;
+      Object.keys(node).forEach(function (key) {
+        if (typeof node[key] === "string") node[key] = proxyUrl(node[key], key);
+        else walk(node[key], depth + 1, key);
+      });
+    }
+
+    walk(value, 0, "");
+    var changed = summary.unsignedManifests > 0;
+    summary.reason = changed ? "unsigned HLS manifest routed through Gateway"
+      : (summary.manifests ? "only signed HLS manifests found" : "no supported HLS manifest URL");
+    if (changed) logger.warn("Paramount playback manifest routed through Gateway", {
+      platform: platform ? platform.id : "unknown",
       endpoint: endpoint || "playback-metadata",
-      logMissing: false,
-      changedMessage: "Paramount playback metadata HLS manifest cache refreshed"
+      manifests: summary.unsignedManifests,
+      signedSkipped: summary.signedManifestsSkipped
     });
-    var injected = inject(refreshed.body, requestUrl, config, logger, platform);
+    return { body: changed ? JSON.stringify(value) : body, changed: changed, summary: summary };
+  }
+
+  function adaptParamountPlayback(body, requestUrl, config, logger, platform, endpoint) {
+    // Paramount tvOS strips or bypasses an added query string and resumes
+    // directly at media segments. Give AVPlayer an unmistakably different
+    // master URL whose response is produced by the local Gateway instead.
+    var proxied = proxyParamountManifests(body, config, logger, platform, endpoint);
+    var injected = inject(proxied.body, requestUrl, config, logger, platform);
     var summary = injected.summary || {};
-    summary.manifests = refreshed.summary && refreshed.summary.manifests || 0;
-    summary.unsignedManifests = refreshed.summary && refreshed.summary.unsignedManifests || 0;
-    summary.signedManifestsSkipped = refreshed.summary && refreshed.summary.signedManifestsSkipped || 0;
-    summary.manifestRefreshReason = refreshed.summary && refreshed.summary.reason || "";
+    summary.manifests = proxied.summary && proxied.summary.manifests || 0;
+    summary.unsignedManifests = proxied.summary && proxied.summary.unsignedManifests || 0;
+    summary.signedManifestsSkipped = proxied.summary && proxied.summary.signedManifestsSkipped || 0;
+    summary.manifestProxyReason = proxied.summary && proxied.summary.reason || "";
     return {
       body: injected.body,
-      changed: !!(refreshed.changed || injected.changed),
+      changed: !!(proxied.changed || injected.changed),
       summary: summary
     };
   }

@@ -309,6 +309,30 @@ GSS.M3U8 = (function createM3U8Tools() {
     return changed ? output.join("\n") : body;
   }
 
+  function absolutizeUris(body, originUrl) {
+    if (!body || body.indexOf("#EXTM3U") < 0) return body;
+    function absolute(value) {
+      value = String(value || "");
+      if (!value || /^[a-z][a-z0-9+.-]*:/i.test(value)) return value;
+      return GSS.Url.resolve(originUrl, value);
+    }
+    return body.replace(/\r\n/g, "\n").split("\n").map(function (line) {
+      var trimmed = line.trim();
+      if (!trimmed) return line;
+      if (trimmed[0] !== "#") {
+        var start = line.indexOf(trimmed);
+        return line.slice(0, start) + absolute(trimmed) + line.slice(start + trimmed.length);
+      }
+      return line.replace(/(\bURI=)(?:"([^"]*)"|'([^']*)'|([^,\s]*))/ig, function (match, prefix, doubleQuoted, singleQuoted, bare) {
+        var value = doubleQuoted !== undefined ? doubleQuoted : (singleQuoted !== undefined ? singleQuoted : bare);
+        var resolved = absolute(value);
+        if (doubleQuoted !== undefined) return prefix + '"' + resolved + '"';
+        if (singleQuoted !== undefined) return prefix + "'" + resolved + "'";
+        return prefix + resolved;
+      });
+    }).join("\n");
+  }
+
   return {
     parseAttributes: parseAttributes,
     chooseSourceTrack: chooseSourceTrack,
@@ -316,6 +340,7 @@ GSS.M3U8 = (function createM3U8Tools() {
     isMediaPlaylist: isMediaPlaylist,
     isDirectSubtitlePlaylist: isDirectSubtitlePlaylist,
     injectTracks: injectTracks,
-    decorateSubtitlePlaylist: decorateSubtitlePlaylist
+    decorateSubtitlePlaylist: decorateSubtitlePlaylist,
+    absolutizeUris: absolutizeUris
   };
 })();

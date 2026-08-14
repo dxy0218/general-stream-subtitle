@@ -32,7 +32,7 @@
   function emptyResponse(reason, format, origin) {
     trace("empty-response", "fallback", { reason: reason, format: format ? format.id : "unknown" }, "error", origin || requestUrl);
     logger.error(reason + "; returning an empty virtual response");
-    if (path === "/playlist") { GSS.Runtime.doneResponse(200, { "Content-Type": "application/vnd.apple.mpegurl; charset=utf-8", "Cache-Control": "no-store" }, "#EXTM3U\n#EXT-X-ENDLIST\n"); return; }
+    if (path === "/manifest" || path === "/playlist") { GSS.Runtime.doneResponse(200, { "Content-Type": "application/vnd.apple.mpegurl; charset=utf-8", "Cache-Control": "no-store" }, "#EXTM3U\n#EXT-X-ENDLIST\n"); return; }
     if (path === "/youtube" && /(?:[?&]fmt=json3|\.json(?:$|[?#]))/i.test(String(origin || ""))) { GSS.Runtime.doneResponse(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" }, '{"events":[]}'); return; }
     if (format && format.id === "ttml") { GSS.Runtime.doneResponse(200, { "Content-Type": format.contentType, "Cache-Control": "no-store" }, "<?xml version=\"1.0\"?><tt xmlns=\"http://www.w3.org/ns/ttml\"><body><div/></body></tt>"); return; }
     GSS.Runtime.doneResponse(200, { "Content-Type": "text/vtt; charset=utf-8", "Cache-Control": "no-store" }, "WEBVTT\n\n");
@@ -104,13 +104,30 @@
     if (!origin) { emptyResponse("missing origin URL", null, origin); return; }
     if (path === "/youtube") origin = forwardedOrigin(origin, query);
 
-    trace("subtitle-request", "started", { route: path, mode: mode, source: source, target: target }, "info", origin);
+    trace(path === "/manifest" ? "manifest-request" : "subtitle-request", "started", { route: path, mode: mode, source: source, target: target }, "info", origin);
 
     GSS.Runtime.httpGet({ url: origin, headers: upstreamRequestHeaders(platform, query.full === "1") }, function (error, body, response) {
       if (error) { emptyResponse("upstream fetch failed: " + String(error), null, origin); return; }
       try {
         var upstreamType = headerValue(upstreamHeaders(response), "content-type");
         trace("upstream-response", "received", { status: response && (response.status || response.statusCode) || 200, contentType: upstreamType || "unknown", bodySize: String(body || "").length }, "info", origin);
+        if (path === "/manifest") {
+          if (body.indexOf("#EXTM3U") < 0) { originalResponse("upstream manifest was not HLS", body, response, upstreamType); return; }
+          var detectedPlatform = GSS.Platforms.detect(origin, config) || { id: platform };
+          var manifest = GSS.M3U8.isDirectSubtitlePlaylist(origin, detectedPlatform)
+            ? GSS.M3U8.decorateSubtitlePlaylist(body, origin, mode, source, target, config, logger, platform)
+            : GSS.M3U8.injectTracks(body, origin, config, logger, detectedPlatform);
+          manifest = GSS.M3U8.absolutizeUris(manifest, origin);
+          var manifestSummary = GSS.M3U8.inspectTrackTypes(manifest.replace(/\r\n/g, "\n").split("\n"));
+          trace("manifest-proxy", manifest === body ? "unchanged" : "rewritten", {
+            media: GSS.M3U8.isMediaPlaylist(body),
+            subtitles: manifestSummary.subtitles,
+            virtualSubtitleUris: manifestSummary.virtualSubtitleUris,
+            bodySize: String(manifest).length
+          }, "info", origin);
+          GSS.Runtime.doneResponse(200, rewrittenResponseHeaders(response, "application/vnd.apple.mpegurl; charset=utf-8"), manifest);
+          return;
+        }
         if (path === "/playlist" && body.indexOf("#EXTM3U") >= 0) {
           var playlist = GSS.M3U8.decorateSubtitlePlaylist(body, origin, mode, source, target, config, logger, platform);
           trace("subtitle-playlist", playlist === body ? "unchanged" : "rewritten", { bodySize: String(body).length }, "info", origin);

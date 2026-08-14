@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.7.8
+
+- Route unsigned Paramount Apple playback manifests through a synthetic Gateway URL when tvOS discards cache-busting query parameters.
+- Rewrite the proxied master while resolving all relative media and rendition URIs back to the original Paramount CDN.
+- Preserve signed manifests, Irdeto/DRM fields, and every non-Paramount platform path.
+
 ## 0.7.7
 
 - Refresh unsigned Paramount HLS URLs in Apple playback metadata before the Irdeto session creates the tvOS AVPlayer item.

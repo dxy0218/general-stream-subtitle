@@ -128,7 +128,7 @@ test("Paramount tvOS session refreshes only an unsigned known-media HLS URL", ()
   });
   const parsed = JSON.parse(result.body);
   assert.equal(parsed.sessionToken, "private-session-token");
-  assert.equal(parsed.playback.masterUrl, "https://vod.pplus.paramount.tech/title/master.m3u8?gss_manifest_version=0.7.7");
+  assert.equal(parsed.playback.masterUrl, "https://vod.pplus.paramount.tech/title/master.m3u8?gss_manifest_version=0.7.8");
   assert.equal(parsed.playback.signedBackup, "https://vod.pplus.paramount.tech/title/master.m3u8?token=private");
   assert.equal(parsed.playback.licenseUrl, "https://cbsi.live.ott.irdeto.com/streaming/getckc");
   assert.equal(result.headers["Content-Length"], undefined);
@@ -138,7 +138,7 @@ test("Paramount tvOS session refreshes only an unsigned known-media HLS URL", ()
   assert.doesNotMatch(JSON.stringify(records), /private-session-token|token=private/);
 });
 
-test("Paramount tvOS refreshes the playback metadata manifest before the Irdeto session", () => {
+test("Paramount tvOS routes the playback metadata manifest through the Gateway before the Irdeto session", () => {
   const body = JSON.stringify({
     success: true,
     content: {
@@ -158,10 +158,12 @@ test("Paramount tvOS refreshes the playback metadata manifest before the Irdeto 
     $done(p) { result = p; }
   });
   const parsed = JSON.parse(result.body);
-  assert.equal(parsed.content.masterUrl, "https://vod.pplus.paramount.tech/title/master.m3u8?gss_manifest_version=0.7.7");
+  assert.match(parsed.content.masterUrl, /^https:\/\/example\.com\/manifest\?/);
+  assert.match(decodeURIComponent(parsed.content.masterUrl), /origin=https:\/\/vod\.pplus\.paramount\.tech\/title\/master\.m3u8/);
+  assert.match(decodeURIComponent(parsed.content.masterUrl), /version=0\.7\.8/);
   assert.equal(result.headers["Content-Length"], undefined);
   const records = JSON.parse(store.get("GSS_DIAGNOSTICS_V1"));
-  const warning = records.find((row) => row.message === "Paramount playback metadata HLS manifest cache refreshed");
+  const warning = records.find((row) => row.message === "Paramount playback manifest routed through Gateway");
   assert.equal(warning.details.endpoint, "content/playability");
   assert.equal(warning.details.manifests, 1);
   assert.equal(records.some((row) => row.message === "Paramount playback metadata exposed no supported text track"), false);
