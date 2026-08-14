@@ -152,6 +152,66 @@ GSS.PlaybackJson = (function createPlaybackJsonAdapter() {
     });
   }
 
+  function refreshParamountManifests(body, logger, platform) {
+    var value;
+    try { value = JSON.parse(String(body || "")); }
+    catch (_) { return { body: body, changed: false, summary: { reason: "invalid json" } }; }
+
+    var summary = { manifests: 0, unsignedManifests: 0, signedManifestsSkipped: 0, nodesVisited: 0 };
+    var maxNodes = 5000;
+
+    function refreshUrl(url) {
+      if (typeof url !== "string" || !/^https?:\/\//i.test(url)) return url;
+      if (GSS.Url.extension(url) !== "m3u8") return url;
+      var host = GSS.Url.host(url);
+      if (!/(^|\.)(?:pplus\.paramount\.tech|paramount\.tech|cbsaavideo\.com|cbsivideo\.com)$/.test(host)
+        && !/^(?:[^.]+-pplus|cc)\.cbs\.com$/.test(host)
+        && host !== "cbsi.live.ott.irdeto.com"
+        && host !== "splice-media.paramountplus.com") return url;
+      summary.manifests += 1;
+      // Do not alter signed CDN URLs. The observed tvOS VOD master is public
+      // and query-free; changing an authenticated query could break playback.
+      if (url.indexOf("?") >= 0) { summary.signedManifestsSkipped += 1; return url; }
+      summary.unsignedManifests += 1;
+      return url + "?gss_manifest_version=" + encodeURIComponent(GSS.VERSION);
+    }
+
+    function walk(node, depth) {
+      summary.nodesVisited += 1;
+      if (!node || depth > 9 || summary.nodesVisited > maxNodes) return;
+      if (Array.isArray(node)) {
+        for (var i = 0; i < node.length; i += 1) {
+          if (typeof node[i] === "string") node[i] = refreshUrl(node[i]);
+          else walk(node[i], depth + 1);
+        }
+        return;
+      }
+      if (typeof node !== "object") return;
+      Object.keys(node).forEach(function (key) {
+        if (typeof node[key] === "string") node[key] = refreshUrl(node[key]);
+        else walk(node[key], depth + 1);
+      });
+    }
+
+    walk(value, 0);
+    var changed = summary.unsignedManifests > 0;
+    summary.reason = changed ? "unsigned HLS manifest cache refreshed"
+      : (summary.manifests ? "only signed HLS manifests found" : "no supported HLS manifest URL");
+    if (changed) logger.warn("Paramount session HLS manifest cache refreshed", {
+      platform: platform ? platform.id : "unknown",
+      manifests: summary.unsignedManifests,
+      signedSkipped: summary.signedManifestsSkipped
+    });
+    else logger.warn("Paramount session exposed no refreshable HLS manifest URL", {
+      platform: platform ? platform.id : "unknown",
+      reason: summary.reason,
+      manifests: summary.manifests,
+      signedSkipped: summary.signedManifestsSkipped,
+      nodesVisited: summary.nodesVisited
+    });
+    return { body: changed ? JSON.stringify(value) : body, changed: changed, summary: summary };
+  }
+
   function inject(body, requestUrl, config, logger, platform) {
     var value;
     try { value = JSON.parse(String(body || "")); }
@@ -220,5 +280,5 @@ GSS.PlaybackJson = (function createPlaybackJsonAdapter() {
     return { body: body, changed: false, summary: summary };
   }
 
-  return { inject: inject };
+  return { inject: inject, refreshParamountManifests: refreshParamountManifests };
 })();

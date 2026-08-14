@@ -30,8 +30,10 @@
     var processingMode = "full";
     var paramountPlaybackMetadata = /^(?:paramount|paramount-live)$/.test(platform.id)
       && /\/apps-api\/v\d+(?:\.\d+)*\/(?:iphone|ipad|ios|appletv|tvos|appletvtvos)\/(?:video\/cid\/[^\/?#]+|dynamicplay\/(?:show|movie)\/[^\/?#]+|content\/playability)\.json$/i.test(GSS.Url.path(requestUrl));
+    var paramountSessionMetadata = /^(?:paramount|paramount-live)$/.test(platform.id)
+      && /\/apps-api\/v\d+(?:\.\d+)*\/(?:iphone|ipad|ios|appletv|tvos|appletvtvos)\/irdeto-control\/session-token\.json$/i.test(GSS.Url.path(requestUrl));
     if (platform.id === "discovery") processingMode = String(config.discoveryMode || "full");
-    else if (config.safePlayback && paramountPlaybackMetadata) processingMode = "full";
+    else if (config.safePlayback && (paramountPlaybackMetadata || paramountSessionMetadata)) processingMode = "full";
     else if (config.safePlayback && /^(max|pluto|prime|hulu)$/.test(platform.id)) processingMode = "hls-only";
     else if (config.safePlayback) processingMode = "hls-only";
     if (processingMode === "off") { record(platform, "adapter-off", false, { processingMode: processingMode }, "bypassed"); GSS.Runtime.passThrough(); return; }
@@ -78,7 +80,9 @@
       contentType = "application/dash+xml; charset=utf-8";
       record(platform, "dash", output !== body, { strategy: GSS.Platforms.useSourceReplacement(platform, config) ? "replace-source" : "duplicate" });
     } else if (/^\s*[\[{]/.test(body) && /^(max|discovery|paramount|paramount-live)$/.test(platform.id)) {
-      var jsonResult = GSS.PlaybackJson.inject(body, requestUrl, config, logger, platform);
+      var jsonResult = paramountSessionMetadata
+        ? GSS.PlaybackJson.refreshParamountManifests(body, logger, platform)
+        : GSS.PlaybackJson.inject(body, requestUrl, config, logger, platform);
       output = jsonResult.body;
       contentType = "application/json; charset=utf-8";
       if (paramountPlaybackMetadata && !jsonResult.changed) {
@@ -92,7 +96,7 @@
           nodesVisited: jsonResult.summary && jsonResult.summary.nodesVisited || 0
         });
       }
-      record(platform, "playback-json", jsonResult.changed, jsonResult.summary);
+      record(platform, paramountSessionMetadata ? "paramount-session-json" : "playback-json", jsonResult.changed, jsonResult.summary);
     } else {
       record(platform, "unsupported-response", false, { bodySize: String(body).length }, "bypassed", "warn");
       GSS.Runtime.passThrough(); return;

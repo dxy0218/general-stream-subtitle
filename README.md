@@ -4,7 +4,7 @@
 
 项目通过 HTTPS MITM 读取播放器清单、播放器响应或文本字幕。默认兼容策略会保留平台原有字幕轨的名称、语言和选择身份，只把字幕 URI 指向翻译网关；也可以切换为新增 **`Translate-zh`** 轨道。播放器请求该轨道后，模块获取原字幕、调用翻译 Provider，并返回双语或纯翻译字幕。
 
-> 当前版本：**v0.7.5**
+> 当前版本：**v0.7.6**
 > 支持系统：iOS、iPadOS、macOS、tvOS（具体能力取决于代理客户端与流媒体 App）  
 > 开源协议：MIT
 
@@ -439,6 +439,12 @@ cdn.example.net
 ```
 
 ## 版本更新记录
+
+### v0.7.6 — Paramount+ Apple TV 最终清单缓存刷新
+
+- tvOS 实机日志确认 Splice 预览清单已正常解密，但正式剧集会从旧主清单直接恢复到媒体分片，导致 GSS 没有机会改写字幕 URI。
+- Shadowrocket 现在额外处理精确的 `irdeto-control/session-token.json` 响应；只为已知 Paramount 媒体域名中未签名的 `.m3u8` URL 添加版本参数，强制 AVPlayer 重新请求正式主清单。
+- 会话令牌、许可证地址、签名清单 URL 和其他 DRM 字段保持原样；Max、Discovery+ 及其他平台逻辑不变。
 
 ### v0.7.5 — Paramount+ Apple TV Splice 清单适配
 

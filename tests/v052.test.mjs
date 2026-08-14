@@ -106,6 +106,38 @@ test("Shadowrocket processes Paramount iOS and current tvOS playback metadata", 
   }
 });
 
+test("Paramount tvOS session refreshes only an unsigned known-media HLS URL", () => {
+  const body = JSON.stringify({
+    sessionToken: "private-session-token",
+    playback: {
+      masterUrl: "https://vod.pplus.paramount.tech/title/master.m3u8",
+      signedBackup: "https://vod.pplus.paramount.tech/title/master.m3u8?token=private",
+      licenseUrl: "https://cbsi.live.ott.irdeto.com/streaming/getckc"
+    }
+  });
+  const { store, persistent } = storeRuntime(); let result;
+  run("dist/manifest.js", {
+    $request: {
+      url: "https://www.paramountplus.com/apps-api/v3.3/appletvtvos/irdeto-control/session-token.json?contentId=demo",
+      headers: {}
+    },
+    $response: { body, headers: { "Content-Type": "application/json", "Content-Length": "999" } },
+    $argument: "presetMode=true&safePlayback=true&platformParamount=true&logEnabled=true",
+    $persistentStore: persistent,
+    $done(p) { result = p; }
+  });
+  const parsed = JSON.parse(result.body);
+  assert.equal(parsed.sessionToken, "private-session-token");
+  assert.equal(parsed.playback.masterUrl, "https://vod.pplus.paramount.tech/title/master.m3u8?gss_manifest_version=0.7.6");
+  assert.equal(parsed.playback.signedBackup, "https://vod.pplus.paramount.tech/title/master.m3u8?token=private");
+  assert.equal(parsed.playback.licenseUrl, "https://cbsi.live.ott.irdeto.com/streaming/getckc");
+  assert.equal(result.headers["Content-Length"], undefined);
+  const records = JSON.parse(store.get("GSS_DIAGNOSTICS_V1"));
+  const warning = records.find((row) => row.message === "Paramount session HLS manifest cache refreshed");
+  assert.equal(warning.details.manifests, 1);
+  assert.doesNotMatch(JSON.stringify(records), /private-session-token|token=private/);
+});
+
 test("Discovery compatibility mode overrides stored settings and can fully pass through", () => {
   const body = fs.readFileSync(path.join(root, "tests/fixtures/master.m3u8"), "utf8");
   const { store, persistent } = storeRuntime(); let result;
@@ -497,7 +529,7 @@ test("Shadowrocket Paramount metadata rule matches only Apple VOD playback descr
   assert.equal(pattern.test("https://www.paramountplus.com/apps-api/v3.1/appletvtvos/dynamicplay/movie/12345.json"), true);
   assert.equal(pattern.test("https://www.paramountplus.com/apps-api/v3.1/appletvtvos/content/playability.json?contentId=demo"), true);
   assert.equal(pattern.test("https://www.paramountplus.com/apps-api/v3.0/appletvtvos/video/streams/history.json"), false);
-  assert.equal(pattern.test("https://www.paramountplus.com/apps-api/v3.3/appletvtvos/irdeto-control/session-token.json"), false);
+  assert.equal(pattern.test("https://www.paramountplus.com/apps-api/v3.3/appletvtvos/irdeto-control/session-token.json?contentId=demo"), true);
   assert.equal(pattern.test("https://www.paramountplus.com/apps-api/v2.0/iphone/auth/login.json"), false);
   assert.equal(pattern.test("https://www.paramountplus.com/apps-api/v3.0/iphone/account/profile.json"), false);
   assert.equal(pattern.test("https://auth.paramountplus.com/login"), false);

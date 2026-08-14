@@ -49,9 +49,11 @@ const paramountPlaybackPattern = String.raw`^https?:\/\/(?:[^\/]+\.)*(?:pplus\.p
 // iPhone/iPad use video/cid metadata, while the current tvOS app identifies
 // itself as the single platform token "appletvtvos". Its show page first uses
 // dynamicplay, then the selected episode is resolved by content/playability.
-// Keep the rule limited to these VOD description endpoints so account, DRM and
-// general catalogue JSON stay out.
-const paramountApplePlaybackPattern = String.raw`^https?:\/\/www\.paramountplus\.com\/apps-api\/v\d+(?:\.\d+)*\/(?:iphone|ipad|ios|appletv|tvos|appletvtvos)\/(?:video\/cid\/[^\/?#]+|dynamicplay\/(?:show|movie)\/[^\/?#]+|content\/playability)\.json(?:\?.*)?$`;
+// Keep the rule limited to these VOD description endpoints plus the exact
+// Irdeto session response that hands tvOS its cached media URL. The latter is
+// only used to version an unsigned .m3u8 URL; license and token fields are not
+// read or modified. Account and general catalogue JSON stay out.
+const paramountApplePlaybackPattern = String.raw`^https?:\/\/www\.paramountplus\.com\/apps-api\/v\d+(?:\.\d+)*\/(?:iphone|ipad|ios|appletv|tvos|appletvtvos)\/(?:video\/cid\/[^\/?#]+|dynamicplay\/(?:show|movie)\/[^\/?#]+|content\/playability|irdeto-control\/session-token)\.json(?:\?.*)?$`;
 // Only media delivery hosts and explicit manifest files are inspected. App,
 // account, playback-session, GraphQL and DRM endpoints stay outside the rule.
 const warnerMediaPattern = String.raw`^https?:\/\/(?:(?:[^\/]+\.)*(?:prod\.media\.max\.com|prd\.media\.max\.com|prod\.media\.h264\.io|prd\.media\.h264\.io|hbomaxcdn\.com)|manifests(?:\.v2)?\.api\.hbo\.com|[^\/.]*discovery[^\/.]*\.uplynk\.com|(?:dplus|discovery)[^\/.]*\.(?:h264\.io|akamaized\.net))\/.*\.(?:m3u8|mpd)(?:\?.*)?$`;
