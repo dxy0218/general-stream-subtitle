@@ -194,6 +194,21 @@ GSS.M3U8 = (function createM3U8Tools() {
     return hasSegments && !hasVariants && !hasRenditions;
   }
 
+  function isDirectSubtitlePlaylist(url, platform) {
+    if (!platform || platform.id === "max") return false;
+    var path = GSS.Url.path(url).toLowerCase();
+    if (!/\.m3u8$/.test(path)) return false;
+    if (/^(?:paramount|paramount-live)$/.test(platform.id)) {
+      return /(?:^|\/)(?:stream_vtt|manifest_[^/]*|[^/]*(?:subtitle|caption|webvtt|text)[^/]*)\.m3u8$/.test(path)
+        || /\/(?:subtitles?|captions?|webvtt|text)\//.test(path);
+    }
+    if (platform.id === "pluto") {
+      return /\/subtitle\/[^/]+\/playlist\.m3u8$/.test(path)
+        || /\/(?:subtitles?|captions?|webvtt)\//.test(path);
+    }
+    return false;
+  }
+
   function injectTracks(body, requestUrl, config, logger, platform) {
     if (!config.enabled || !body || body.indexOf("#EXTM3U") < 0) return body;
     if (/(?:gss\.local|example\.com)\/playlist/.test(body)) return body;
@@ -299,6 +314,7 @@ GSS.M3U8 = (function createM3U8Tools() {
     chooseSourceTrack: chooseSourceTrack,
     inspectTrackTypes: inspectTrackTypes,
     isMediaPlaylist: isMediaPlaylist,
+    isDirectSubtitlePlaylist: isDirectSubtitlePlaylist,
     injectTracks: injectTracks,
     decorateSubtitlePlaylist: decorateSubtitlePlaylist
   };

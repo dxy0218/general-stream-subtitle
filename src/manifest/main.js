@@ -38,7 +38,23 @@
     if (body.indexOf("#EXTM3U") >= 0) {
       var media = GSS.M3U8.isMediaPlaylist(body);
       var summary = GSS.M3U8.inspectTrackTypes(body.replace(/\r\n/g, "\n").split("\n"));
-      output = GSS.M3U8.injectTracks(body, requestUrl, config, logger, platform);
+      var directSubtitlePlaylist = media && GSS.M3U8.isDirectSubtitlePlaylist(requestUrl, platform);
+      if (directSubtitlePlaylist) {
+        output = GSS.M3U8.decorateSubtitlePlaylist(
+          body,
+          requestUrl,
+          "bilingual",
+          GSS.Language.googleSource("", config.source),
+          config.target,
+          config,
+          logger,
+          platform.id
+        );
+        summary.directSubtitlePlaylist = true;
+        summary.virtualizedSegments = output === body ? 0 : (output.match(/(?:gss\.local|example\.com)\/subtitle/g) || []).length;
+      } else {
+        output = GSS.M3U8.injectTracks(body, requestUrl, config, logger, platform);
+      }
       if (output !== body) {
         var outputSummary = GSS.M3U8.inspectTrackTypes(output.replace(/\r\n/g, "\n").split("\n"));
         summary.outputSubtitles = outputSummary.subtitles;
@@ -50,7 +66,7 @@
           ? "replace-source" : "duplicate";
       }
       contentType = "application/vnd.apple.mpegurl; charset=utf-8";
-      record(platform, media ? "hls-media" : "hls-master", output !== body, summary, output !== body ? "rewritten" : "unchanged");
+      record(platform, directSubtitlePlaylist ? "hls-subtitle" : (media ? "hls-media" : "hls-master"), output !== body, summary, output !== body ? "rewritten" : "unchanged");
     } else if (processingMode === "hls-only") {
       record(platform, "safe-playback-bypass", false, { responseKind: /<MPD\b/i.test(body) ? "dash" : /^\s*[\[{]/.test(body) ? "json" : "unknown" }, "bypassed");
       GSS.Runtime.passThrough(); return;

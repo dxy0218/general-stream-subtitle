@@ -178,6 +178,12 @@ GSS Hulu HLS = type=http-response, pattern=${huluHlsPattern}, requires-body=1, m
 GSS Paramount HLS = type=http-response, pattern=${paramountHlsPattern}, requires-body=1, max-size=4194304, timeout=20, script-path=${manifestUrl}, argument=${shadowArgs}
 GSS Gateway = type=http-request, pattern=${gatewayGetPattern}, requires-body=0, timeout=90, script-path=${gatewayUrl}, argument=${shadowArgs}
 GSS Gateway Save = type=http-request, pattern=${gatewaySavePattern}, requires-body=1, timeout=90, script-path=${gatewayUrl}, argument=${shadowArgs}
+
+[Rule]
+# Pluto's segment CDN is poisoned as 0.0.0.0 by some local DNS resolvers.
+# Resolve it through the selected proxy so video, keys and captions stay usable.
+DOMAIN-SUFFIX,plutotv.net,PROXY,force-remote-dns
+
 [MITM]
 hostname = %APPEND% ${shadowMitmHosts}
 `;

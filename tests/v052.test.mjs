@@ -197,6 +197,52 @@ test("Shadowrocket Paramount preset preserves the official rendition and virtual
   assert.match(decoded, /strategy=replace-source/);
 });
 
+test("Paramount direct WebVTT playlist is virtualized when the master manifest came from app cache", () => {
+  const body = [
+    "#EXTM3U",
+    "#EXT-X-VERSION:6",
+    "#EXT-X-TARGETDURATION:7",
+    "#EXT-X-PLAYLIST-TYPE:VOD",
+    "#EXTINF:6.000,",
+    "seg_1.vtt",
+    "#EXTINF:6.000,",
+    "seg_2.vtt",
+    "#EXT-X-ENDLIST"
+  ].join("\n");
+  const { store, persistent } = storeRuntime(); let result;
+  run("dist/manifest.js", {
+    $request: {
+      url: "https://vod.pplus.paramount.tech/title/English_1725574736/stream_vtt.m3u8",
+      headers: {}
+    },
+    $response: { body, headers: { "Content-Type": "application/vnd.apple.mpegurl" } },
+    $argument: "presetMode=true&safePlayback=true&platformParamount=true&logEnabled=true",
+    $persistentStore: persistent,
+    $done(p) { result = p; }
+  });
+  const decoded = decodeURIComponent(result.body);
+  assert.equal((result.body.match(/https:\/\/example\.com\/subtitle\?/g) || []).length, 2);
+  assert.match(decoded, /origin=https:\/\/vod\.pplus\.paramount\.tech\/title\/English_1725574736\/seg_1\.vtt/);
+  assert.match(decoded, /platform=paramount/);
+  assert.match(decoded, /mode=bilingual/);
+  const records = JSON.parse(store.get("GSS_DIAGNOSTICS_V1"));
+  assert.equal(records[0].type, "hls-subtitle");
+  assert.equal(records[0].details.directSubtitlePlaylist, true);
+  assert.equal(records[0].details.virtualizedSegments, 2);
+});
+
+test("Max media playlists remain unchanged by the direct subtitle fallback", () => {
+  const body = ["#EXTM3U", "#EXT-X-TARGETDURATION:7", "#EXTINF:6.000,", "seg_1.vtt"].join("\n");
+  const { persistent } = storeRuntime(); let result;
+  run("dist/manifest.js", {
+    $request: { url: "https://gcp.prd.media.h264.io/title/captions/subtitles.m3u8", headers: {} },
+    $response: { body, headers: { "Content-Type": "application/vnd.apple.mpegurl" } },
+    $persistentStore: persistent,
+    $done(p) { result = p; }
+  });
+  assert.deepEqual(Object.keys(result), []);
+});
+
 test("safe playback preset bypasses non-HLS responses and a disabled Discovery adapter", () => {
   const hls = fs.readFileSync(path.join(root, "tests/fixtures/master.m3u8"), "utf8");
   const mpd = fs.readFileSync(path.join(root, "tests/fixtures/simple.mpd"), "utf8");
@@ -324,6 +370,8 @@ test("generated modules use dedicated media-only rules for the requested platfor
   assert.doesNotMatch(shadow, /\*\.paramountplus\.com/);
   assert.doesNotMatch(shadow, /\*\.cbs\.com/);
   assert.doesNotMatch(shadow, /GSS YouTube Player|GSS YouTube Caption/);
+  assert.match(shadow, /^\[Rule\]$/m);
+  assert.match(shadow, /^DOMAIN-SUFFIX,plutotv\.net,PROXY,force-remote-dns$/m);
 });
 
 test("Shadowrocket exposes only native boolean switches", () => {

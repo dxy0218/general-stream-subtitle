@@ -4,7 +4,7 @@
 
 项目通过 HTTPS MITM 读取播放器清单、播放器响应或文本字幕。默认兼容策略会保留平台原有字幕轨的名称、语言和选择身份，只把字幕 URI 指向翻译网关；也可以切换为新增 **`Translate-zh`** 轨道。播放器请求该轨道后，模块获取原字幕、调用翻译 Provider，并返回双语或纯翻译字幕。
 
-> 当前版本：**v0.7.0**
+> 当前版本：**v0.7.1**
 > 支持系统：iOS、iPadOS、macOS、tvOS（具体能力取决于代理客户端与流媒体 App）  
 > 开源协议：MIT
 
@@ -440,6 +440,12 @@ cdn.example.net
 
 ## 版本更新记录
 
+### v0.7.1 — Paramount+ 缓存兜底与 Pluto TV 远程 DNS
+
+- Paramount+ 在主清单被 App 缓存、没有重新命中注入脚本时，仍会识别 `stream_vtt.m3u8`、`manifest_*.m3u8` 等字幕媒体清单，并将其中的 VTT 分片送入双语翻译网关。
+- Shadowrocket 对 `*.plutotv.net` 使用 `force-remote-dns`，避免本地 DNS 将视频、密钥和字幕 CDN 解析为 `0.0.0.0` 后导致无限加载。
+- Max / HBO Max 与 Discovery+ 的既有清单和字幕处理路径保持不变。
+
 ### v0.7.0 — 非 Max 平台统一兼容链路
 
 - HBO Max 已验证实现保持不变；其余平台统一审计识别域名、客户端规则、主清单、字幕播放列表、字幕正文与翻译网关。
@@ -618,7 +624,7 @@ https://example.com/
 
 #### 字幕菜单没有 `Translate-zh` 或翻译字幕
 
-- v0.7.0 默认不会新增 `Translate-zh`；请先选择平台原有的英文/源语言字幕轨。
+- v0.7.1 默认不会新增 `Translate-zh`；请先选择平台原有的英文/源语言字幕轨。Paramount+ 即使复用了缓存主清单，也会在命中 `stream_vtt.m3u8` 后把该原字幕轨接入翻译网关。
 - 确认 CA 证书已安装并完全信任。
 - 确认 MITM / HTTPS 解密已开启。
 - 完全退出目标 App 后重新打开。
