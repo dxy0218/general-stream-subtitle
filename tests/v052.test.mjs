@@ -106,7 +106,7 @@ test("Shadowrocket processes Paramount iOS and current tvOS playback metadata", 
   }
 });
 
-test("Paramount tvOS session refreshes only an unsigned known-media HLS URL", () => {
+test("Paramount tvOS session routes only an unsigned known-media HLS URL through the Gateway", () => {
   const body = JSON.stringify({
     sessionToken: "private-session-token",
     playback: {
@@ -128,12 +128,15 @@ test("Paramount tvOS session refreshes only an unsigned known-media HLS URL", ()
   });
   const parsed = JSON.parse(result.body);
   assert.equal(parsed.sessionToken, "private-session-token");
-  assert.equal(parsed.playback.masterUrl, "https://vod.pplus.paramount.tech/title/master.m3u8?gss_manifest_version=0.7.8");
+  assert.match(parsed.playback.masterUrl, /^https:\/\/example\.com\/manifest\?/);
+  assert.match(decodeURIComponent(parsed.playback.masterUrl), /origin=https:\/\/vod\.pplus\.paramount\.tech\/title\/master\.m3u8/);
+  assert.match(decodeURIComponent(parsed.playback.masterUrl), /version=0\.7\.9/);
   assert.equal(parsed.playback.signedBackup, "https://vod.pplus.paramount.tech/title/master.m3u8?token=private");
   assert.equal(parsed.playback.licenseUrl, "https://cbsi.live.ott.irdeto.com/streaming/getckc");
   assert.equal(result.headers["Content-Length"], undefined);
   const records = JSON.parse(store.get("GSS_DIAGNOSTICS_V1"));
-  const warning = records.find((row) => row.message === "Paramount session HLS manifest cache refreshed");
+  const warning = records.find((row) => row.message === "Paramount playback manifest routed through Gateway");
+  assert.equal(warning.details.endpoint, "session-token");
   assert.equal(warning.details.manifests, 1);
   assert.doesNotMatch(JSON.stringify(records), /private-session-token|token=private/);
 });
@@ -160,7 +163,7 @@ test("Paramount tvOS routes the playback metadata manifest through the Gateway b
   const parsed = JSON.parse(result.body);
   assert.match(parsed.content.masterUrl, /^https:\/\/example\.com\/manifest\?/);
   assert.match(decodeURIComponent(parsed.content.masterUrl), /origin=https:\/\/vod\.pplus\.paramount\.tech\/title\/master\.m3u8/);
-  assert.match(decodeURIComponent(parsed.content.masterUrl), /version=0\.7\.8/);
+  assert.match(decodeURIComponent(parsed.content.masterUrl), /version=0\.7\.9/);
   assert.equal(result.headers["Content-Length"], undefined);
   const records = JSON.parse(store.get("GSS_DIAGNOSTICS_V1"));
   const warning = records.find((row) => row.message === "Paramount playback manifest routed through Gateway");

@@ -371,6 +371,7 @@ GSS.PlaybackJson = (function createPlaybackJsonAdapter() {
   return {
     inject: inject,
     refreshParamountManifests: refreshParamountManifests,
+    proxyParamountManifests: proxyParamountManifests,
     adaptParamountPlayback: adaptParamountPlayback
   };
 })();

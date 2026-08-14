@@ -84,7 +84,7 @@
       record(platform, "dash", output !== body, { strategy: GSS.Platforms.useSourceReplacement(platform, config) ? "replace-source" : "duplicate" });
     } else if (/^\s*[\[{]/.test(body) && /^(max|discovery|paramount|paramount-live)$/.test(platform.id)) {
       var jsonResult = paramountSessionMetadata
-        ? GSS.PlaybackJson.refreshParamountManifests(body, logger, platform, { endpoint: "session-token" })
+        ? GSS.PlaybackJson.proxyParamountManifests(body, config, logger, platform, "session-token")
         : paramountPlaybackMetadata
           ? GSS.PlaybackJson.adaptParamountPlayback(body, requestUrl, config, logger, platform, paramountMetadataEndpoint)
           : GSS.PlaybackJson.inject(body, requestUrl, config, logger, platform);

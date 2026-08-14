@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.7.9
+
+- Route the unsigned Paramount master manifest exposed by the Irdeto session response through the same synthetic Gateway used for Apple playback metadata.
+- Preserve session tokens, license fields, DRM values, signed URLs, and existing mobile subtitle-playlist handling.
+
 ## 0.7.8
 
 - Route unsigned Paramount Apple playback manifests through a synthetic Gateway URL when tvOS discards cache-busting query parameters.

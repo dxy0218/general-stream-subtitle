@@ -118,7 +118,7 @@ test("Paramount master Gateway keeps media routes absolute and virtualizes the t
   const origin = "https://vod.pplus.paramount.tech/library/show/master.m3u8";
   run("dist/gateway.js", {
     $request: {
-      url: "https://example.com/manifest?origin=" + encodeURIComponent(origin) + "&mode=bilingual&source=auto&target=zh-CN&platform=paramount&version=0.7.8",
+      url: "https://example.com/manifest?origin=" + encodeURIComponent(origin) + "&mode=bilingual&source=auto&target=zh-CN&platform=paramount&version=0.7.9",
       headers: { "User-Agent": "AppleCoreMedia" }
     },
     $httpClient: { get(options, callback) { callback(null, { status: 200, headers: { "Content-Type": "application/vnd.apple.mpegurl" } }, master); } },
