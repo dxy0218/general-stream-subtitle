@@ -222,6 +222,45 @@ test("Shadowrocket Paramount preset preserves the official rendition and virtual
   assert.match(decoded, /strategy=replace-source/);
 });
 
+test("Shadowrocket Paramount Splice master uses the same source-replacement path", () => {
+  const body = fs.readFileSync(path.join(root, "tests/fixtures/paramount-live-master.m3u8"), "utf8");
+  const { persistent } = storeRuntime(); let result;
+  run("dist/manifest.js", {
+    $request: { url: "https://splice.paramountplus.com/title/master.m3u8?session=demo", headers: {} },
+    $response: { body, headers: { "Content-Type": "application/vnd.apple.mpegurl" } },
+    $argument: "presetMode=true&safePlayback=true&platformParamount=true&paramountReplaceSource=true",
+    $persistentStore: persistent,
+    $done(p) { result = p; }
+  });
+  assert.equal((result.body.match(/TYPE=SUBTITLES/g) || []).length, 1);
+  assert.doesNotMatch(result.body, /NAME="Translate-zh"/);
+  const decoded = decodeURIComponent(result.body);
+  assert.match(decoded, /https:\/\/example\.com\/playlist\?/);
+  assert.match(decoded, /platform=paramount/);
+  assert.match(decoded, /strategy=replace-source/);
+});
+
+test("Paramount tvOS metadata without captions records a safe actionable warning", () => {
+  const { store, persistent } = storeRuntime(); let result;
+  run("dist/manifest.js", {
+    $request: {
+      url: "https://www.paramountplus.com/apps-api/v3.1/appletvtvos/content/playability.json?contentId=private-token",
+      headers: {}
+    },
+    $response: { body: JSON.stringify({ success: true, content: { id: "demo" } }), headers: { "Content-Type": "application/json" } },
+    $argument: "presetMode=true&safePlayback=true&platformParamount=true&logEnabled=true",
+    $persistentStore: persistent,
+    $done(p) { result = p; }
+  });
+  assert.deepEqual(Object.keys(result), []);
+  const records = JSON.parse(store.get("GSS_DIAGNOSTICS_V1"));
+  const warning = records.find((row) => row.type === "runtime-log" && row.level === "warn");
+  assert.equal(warning.message, "Paramount playback metadata exposed no supported text track");
+  assert.equal(warning.details.endpoint, "content/playability");
+  assert.equal(warning.details.textTracks, 0);
+  assert.doesNotMatch(JSON.stringify(warning), /private-token/);
+});
+
 test("Paramount direct WebVTT playlist is virtualized when the master manifest came from app cache", () => {
   const body = [
     "#EXTM3U",
@@ -395,6 +434,8 @@ test("generated modules use dedicated media-only rules for the requested platfor
   assert.match(shadow, /\*\.plex\.direct/);
   assert.doesNotMatch(shadow, /\*\.paramountplus\.com/);
   assert.match(shadow, /www\.paramountplus\.com/);
+  assert.match(shadow, /splice\.paramountplus\.com/);
+  assert.match(shadow, /splice-media\.paramountplus\.com/);
   assert.doesNotMatch(shadow, /\*\.cbs\.com/);
   assert.doesNotMatch(shadow, /GSS YouTube Player|GSS YouTube Caption/);
   assert.match(shadow, /^\[Rule\]$/m);
@@ -437,6 +478,9 @@ test("Shadowrocket Paramount rule only intercepts known HLS media hosts", () => 
   assert.equal(pattern.test("https://news-pplus.cbs.com/live/master.m3u8"), true);
   assert.equal(pattern.test("https://cc.cbs.com/closedcaption/show/en.m3u8"), true);
   assert.equal(pattern.test("https://cbsi.live.ott.irdeto.com/channel/subtitles/en.m3u8"), true);
+  assert.equal(pattern.test("https://splice.paramountplus.com/title/master.m3u8?session=x"), true);
+  assert.equal(pattern.test("https://splice-media.paramountplus.com/title/subtitles/en.m3u8?session=x"), true);
+  assert.equal(pattern.test("https://splice-media.paramountplus.com/assets/splice_preview/demo.mp4"), false);
   assert.equal(pattern.test("https://auth.paramountplus.com/login"), false);
   assert.equal(pattern.test("https://api.paramountplus.com/graphql"), false);
   assert.equal(pattern.test("https://www.cbs.com/account/profile"), false);

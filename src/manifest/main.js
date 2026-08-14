@@ -81,6 +81,17 @@
       var jsonResult = GSS.PlaybackJson.inject(body, requestUrl, config, logger, platform);
       output = jsonResult.body;
       contentType = "application/json; charset=utf-8";
+      if (paramountPlaybackMetadata && !jsonResult.changed) {
+        var metadataPath = GSS.Url.path(requestUrl);
+        logger.warn("Paramount playback metadata exposed no supported text track", {
+          endpoint: /\/content\/playability\.json$/i.test(metadataPath) ? "content/playability"
+            : /\/dynamicplay\//i.test(metadataPath) ? "dynamicplay" : "video/cid",
+          reason: jsonResult.summary && jsonResult.summary.reason || "unchanged",
+          arrays: jsonResult.summary && jsonResult.summary.arraysInspected || 0,
+          textTracks: jsonResult.summary && jsonResult.summary.textTracks || 0,
+          nodesVisited: jsonResult.summary && jsonResult.summary.nodesVisited || 0
+        });
+      }
       record(platform, "playback-json", jsonResult.changed, jsonResult.summary);
     } else {
       record(platform, "unsupported-response", false, { bodySize: String(body).length }, "bypassed", "warn");

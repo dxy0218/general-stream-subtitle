@@ -38,7 +38,10 @@ const plutoHlsPattern = String.raw`^https?:\/\/(?:(?:[^\/]+\.)*prd\.pluto\.tv|st
 const primeHlsPattern = String.raw`^https?:\/\/(?:(?:[^\/]+\.)*hls\.(?:pv-cdn|row\.aiv-cdn)\.net|avodhlss3ww-a\.akamaihd\.net|(?:d1v5ir2lpwr8os|d22qjgkvxw22r6|d25xi40x97liuc|d27xxe7juh1us6|dmqdd6hw24ucf)\.cloudfront\.net)\/.*\.m3u8(?:\?.*)?$`;
 const primeDashPattern = String.raw`^https?:\/\/(?:[^\/]+\.)*dash\.row\.aiv-cdn\.net\/.*\.mpd(?:\?.*)?$`;
 const huluHlsPattern = String.raw`^https?:\/\/(?:(?:vodmanifest|manifest-dp|livemanifest-f|live-sc)\.hulustream\.com|assets\.huluim\.com|assetshuluimcom-a\.akamaihd\.net)\/.*\.m3u8(?:\?.*)?$`;
-const paramountHlsPattern = String.raw`^https?:\/\/(?:(?:[^\/]+\.)*(?:pplus\.paramount\.tech|paramount\.tech|cbsaavideo\.com|cbsivideo\.com)|(?:[^\/.]+-pplus|cc)\.cbs\.com|cbsi\.live\.ott\.irdeto\.com)\/.*\.m3u8(?:\?.*)?$`;
+// The tvOS app keeps its final master/subtitle manifests on two Splice hosts.
+// Match only .m3u8 responses: the same hosts may also serve MP4 previews and
+// other binary media which must never enter a response-body script.
+const paramountHlsPattern = String.raw`^https?:\/\/(?:(?:[^\/]+\.)*(?:pplus\.paramount\.tech|paramount\.tech|cbsaavideo\.com|cbsivideo\.com)|(?:[^\/.]+-pplus|cc)\.cbs\.com|cbsi\.live\.ott\.irdeto\.com|splice(?:-media)?\.paramountplus\.com)\/.*\.m3u8(?:\?.*)?$`;
 const paramountPlaybackPattern = String.raw`^https?:\/\/(?:[^\/]+\.)*(?:pplus\.paramount\.tech|paramount\.tech|paramountplus\.com|cbsaavideo\.com|cbsivideo\.com|cbs\.com)\/.*(?:playback|stream|live|linear|channel|station|session|manifest).*`;
 // Paramount's Apple clients obtain the playback description before AVPlayer
 // opens the CDN. Keep this response rule limited to the VOD metadata endpoint;
@@ -80,7 +83,7 @@ const shadowMitmHosts = [
   "*.hls.pv-cdn.net", "*.hls.row.aiv-cdn.net", "*avodhlss3ww-a.akamaihd.net",
   "d1v5ir2lpwr8os.cloudfront.net", "d22qjgkvxw22r6.cloudfront.net", "d25xi40x97liuc.cloudfront.net", "d27xxe7juh1us6.cloudfront.net", "dmqdd6hw24ucf.cloudfront.net",
   "vodmanifest.hulustream.com", "manifest-dp.hulustream.com", "livemanifest-f.hulustream.com", "live-sc.hulustream.com", "assets.huluim.com", "assetshuluimcom-a.akamaihd.net",
-  "*.pplus.paramount.tech", "*.paramount.tech", "*.cbsaavideo.com", "*.cbsivideo.com", "*-pplus.cbs.com", "cc.cbs.com", "cbsi.live.ott.irdeto.com", "www.paramountplus.com",
+  "*.pplus.paramount.tech", "*.paramount.tech", "*.cbsaavideo.com", "*.cbsivideo.com", "*-pplus.cbs.com", "cc.cbs.com", "cbsi.live.ott.irdeto.com", "www.paramountplus.com", "splice.paramountplus.com", "splice-media.paramountplus.com",
   "*.media.dssott.com", "*.prod.dssott.com", "*.media.starott.com", "*.prod.starott.com", "*.media.dssedge.com", "*.prod.dssedge.com",
   "*.cdn.peacocktv.com", "*.stream.peacocktv.com", "*-vod.fubo.tv", "hls.ted.com",
   "vod-*.live.cf.md.bbci.co.uk", "vod-*-live.akamaized.net", "manifest-viki.viki.io", "*.tubi.video", "*.tubitv.com",
